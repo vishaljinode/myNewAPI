@@ -1,0 +1,2120 @@
+/**
+ *Module for handling HTTP-Verbs made onto "/"
+ */
+var express = require("express"),
+  mongoose = require("mongoose"),
+  debug = require("debug")("coupinos-server"),
+  app = require("../app"),
+  path = require("path"),
+  models = require("../models/postModels"),
+  userModels = require("../models/userModels"),
+  contentModels=require("../models/contentModels"),
+  coupinoModels=require("../models/coupinoModels"),
+  reportModels = require("../models/reportModels")
+  multer = require("multer"),
+  fs = require('fs'),
+  crypto = require("crypto"),
+  helpers = require('../utilities/helper-functions'),
+  geocoder = require("../googlegeocoder/googlegeocoder"),
+  validator = require("../validation/validator");
+let coupinoRouts = require("./coupinosRoutes")
+var auth = require("../middleware/auth");
+var PostImage = models.PostImage;
+var postRouter = express.Router();
+var UserAccount = userModels.UserAccount;
+var Post = models.Post;
+var PostComment = models.PostComment;
+var Content = contentModels.Content;
+var Coupino = coupinoModels.Coupino;
+var CoupinoComment = coupinoModels.CoupinoComment;
+var CoupinoView = coupinoModels.CoupinoView;
+var CoupinoRedeemption = coupinoModels.CoupinoRedeemption;
+var Report = reportModels.Report;
+
+
+
+//priavte methods
+function getPostById(postId, userId, message, res, createPost = "") {
+  app.postController.getPostById(postId, function(error, postDetails) {
+    console.log('postDetailspostDetailspostDetails',postDetails)
+    if (error) {
+      return res.status(400).json({ error: error });
+    }
+    else if (postDetails.exists == false) {
+      return res.status(400).json({ error: "invalid post id" });
+    }
+    else {
+      if(createPost == "true"){
+        app.postController.getPostImageByPostId(postId, function(error, postImage) {
+          if(error){
+            return res.status(500).json({ error: error });
+          }else{
+            postDetails.postImages = []
+            if(postImage){
+              postDetails.postImages.push(postImage)
+            }
+            
+            return res.status(200).json({ status: "true", message: message, data: helpers.getPostObject(postDetails, userId) });
+          }
+        })
+      }else{
+        return res.status(200).json({ status: "true", message: message, data: helpers.getPostObject(postDetails, userId) });
+      }
+
+    }
+  });
+}
+//private methods
+
+//Posts
+postRouter.post('/post/add/', auth, (req, res) => {
+ 
+  var userId = req.user.user_id;
+  let uploadMedia = multer({ storage: helpers.mediaStorage, fileFilter: validator.postMediaFilter }).array('files');
+  // console.log(req.files)
+  app.databaseController.checkUserExistsById(userId, function (error, existedUser) {
+    if (error) {
+      res.json({ error: error });
+    }
+    if (existedUser.exists == false) {
+      return res.status(400).json({ error: "invalid user id." });
+    }
+    else {
+      uploadMedia(req, res, function (err) {
+        // console.log(req.files)
+        if(req.body.type != "TextPosting" && req.body.type != "Advertorial" && req.body.type != "ImagePosting" && req.body.type != "VideoPosting" 
+        ){
+          return res.status(400).json({ error: "type should be TextPosting or Advertorial or ImagePosting or VideoPosting happen" });
+        }
+        if(req.body.type == "TextPosting" && !req.body.postDescription){
+          return res.status(400).json({ error: "in TextPosting post type, postDescription is mandatory" });
+        }
+        if(req.body.type == "Advertorial" && !req.body.postDescription){
+          return res.status(400).json({ error: "in Advertorial post type, postDescription is mandatory" });
+        }
+        if(req.body.type == "ImagePosting" && req.files.length == 0){
+          return res.status(400).json({ error: "in ImagePosting post type, Image is mandatory" });
+        }
+        if(req.body.type == "VideoPosting" && req.files.length == 0){
+          return res.status(400).json({ error: "in VideoPosting post type, Video is mandatory" });
+        }
+        // req.file contains information of uploaded file
+        // req.body contains information of text fields, if there were any
+        if (req.fileValidationError) {
+          return res.send(req.fileValidationError);
+        }
+        else if (!req.files) {
+          return res.send('Please select a file to upload');
+        }
+        else if (err instanceof multer.MulterError) {
+          return res.send(err);
+        }
+        else if (err) {
+          return res.send(err);
+        }
+        let result = '';
+        const files = req.files;
+        let index, len;
+        var postedImage = { mediaUrl: '', mediaType: '' };
+        var postedImages = [];
+        var postJson = { postId: req.body.postId, }
+        // Loop through all the uploaded images and display them on frontend
+        //for (index = 0, len = files.length; index < len; ++index) {
+        for(index = 0; index < files.length; index++) {
+          if((req.body.type == "ImagePosting") && (files[index].mimetype !== "image/png" && files[index].mimetype !== "image/jpeg") ){
+            return res.status(400).json({ error: "in ImagePosting type, can't upload video" });
+          }
+          if((req.body.type == "VideoPosting") &&  (files[index].mimetype == "image/png" || files[index].mimetype == "image/jpeg" || files[index].mimetype == "image/jpg") ){
+            return res.status(400).json({ error: "in ImagePosting type, can't upload image" });
+          }
+          postedImage.mediaUrl = path.join(__dirname, files[index].path);
+          postedImage.mediaType = files[index].mimetype;
+          postedImages.push({ mediaUrl: path.join(__dirname, files[index].path), mediaType: files[index].mimetype });
+          result += path.join(__dirname, files[index].path);
+        }
+        // console.log(postedImages);
+        let coordinates = req.body.latitude +  ","+  req.body.longitude
+        geocoder.reverseGeocode(coordinates, function(error, data) {
+          // console.log(error);
+          // console.log(data.results[0].formatted_address);
+          // console.log(data.results[0].place_id);
+          let postalCode
+          for(let i=0; i<data.results.length; i++){
+            for(let j=0; j<data.results[i].address_components.length; j++){
+              if(data.results[i].address_components[j].types.includes('postal_code')){
+                postalCode = data.results[i].address_components[j].long_name;
+                break;
+              } 
+            }
+          }
+          // console.log(postalCode)
+          var postJson = { 
+            postId: req.body.postId, 
+            partnerId: req.body.partnerId, 
+            postedImages, 
+            hashTags: req.body.hashTags, 
+            postTitle: req.body.postTitle,
+            postDescription: req.body.postDescription, 
+            postedBy: userId, 
+            latitude: req.body.latitude, 
+            longitude: req.body.longitude,
+            isAdvertorialPost: req.body.isAdvertorialPost, 
+            dataPrivacyRule: req.body.dataPrivacyRule, 
+            category: req.body.category,
+            fontColor: req.body.fontColor || '', 
+            backgroundColor: req.body.bgColor || '', 
+            type: req.body.type || '',
+            address: data.results[0].formatted_address || '',
+            placeId: data.results[0].place_id || '',
+            commentAllowed: req.body.commentAllowed || true,
+            zipCode: postalCode || ''
+        };
+          app.postController.createPost(postJson, function (error, createdPost) {
+            if (error || !createdPost) {
+              return res.status(500).json({ error: error });
+            }
+            else {
+              let contentObj = {
+                contentId : createdPost._id,
+                contentType : "Post",
+                contentSubType : req.body.type,
+              }
+              app.postController.createContent(contentObj, function (error, createdPostContent) {
+                if (error || !createdPostContent) {
+                  return res.status(500).json({ error: error });
+                }
+                else {
+                  return getPostById(createdPost._id, req.user.user_id, "Post Created", res,"true");
+                }
+              })
+            }
+          })
+        })               
+      });
+    }
+  });
+
+});
+
+postRouter.post("/post/like", auth, (req, res) => {
+  if (!req.body.postId) {
+    return res.status(400).json({ error: "invalid post id." });
+  }
+
+  app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
+    if (error) {
+      res.json({ error: error });
+    }
+    if (existedPost.exists == false) {
+      return res.status(400).json({ error: "invalid post id." });
+    }
+
+    else {
+      var userId = req.user.user_id;
+      var existingLikes = existedPost.postLikes;
+      let searchedPostLikes = existingLikes.find(x => x.likedBy == userId);
+      if (searchedPostLikes) {
+        app.postController.deletePostLike(existedPost._id, searchedPostLikes._id, function (error, deletedPostLike) {
+          if (error || !deletedPostLike) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            return getPostById(existedPost._id, req.user.user_id, "Post Like Deleted", res);
+          }
+        });
+      }
+      else {
+        app.postController.createPostLike(existedPost, userId, function (error, createdPostLike) {
+          if (error || !createdPostLike) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            return getPostById(existedPost._id, req.user.user_id, "Post Like Created", res);
+          }
+        });
+      }
+    }
+  });
+
+});
+
+postRouter.post("/post/bookmark", auth, (req, res) => {
+  if (!req.body.postId) {
+    return res.status(400).json({ error: "invalid post id." });
+  }
+  app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
+    if (error) {
+      res.json({ error: error });
+    }
+    if (existedPost.exists == false) {
+      return res.status(400).json({ error: "invalid post id." });
+    }
+    else {
+      var userId = req.user.user_id;
+      var existingBookmarks = existedPost.postBookmarks;
+      let searchedPostBookmarks = existingBookmarks.find(x => x.bookmarkedBy == userId);
+      if (searchedPostBookmarks) {
+        app.postController.deletePostBookmark(existedPost._id, searchedPostBookmarks._id, function (error, deletedPostBookmark) {
+          if (error || !deletedPostBookmark) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            return getPostById(existedPost._id, req.user.user_id, "Post Bookmark Deleted", res);
+          }
+        });
+      }
+      else {
+        app.postController.createPostBookmark(existedPost, userId, function (error, createdPostBookmark) {
+          if (error || !createdPostBookmark) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            return getPostById(existedPost._id, req.user.user_id, "Post Bookmark Created", res);
+                    }
+        });
+      }
+    }
+  });
+});
+
+// postRouter.post('/post/get',auth, (req, res) => {
+//   if(!req.body.longitude || !req.body.latitude) {
+//     res.status(400).json({error : "Location parameter missing."});
+//   }
+//   else {
+//     var postParams = {
+//       radius: req.body.radius || 10,
+//       pageSize: req.body.pageSize || 50,
+//       page: req.body.page || 0,
+//       user_id: req.user.user_id,
+//       longitude: req.body.longitude,
+//       latitude: req.body.latitude,
+//       fetchAdvertorialPost: false,
+//       viewBy: req.body.viewBy || ''
+//     }
+
+//     var count = Math.floor(Math.random() * (5 - 3 + 1) + 3);
+
+//     let pageSize = Math.ceil(postParams.pageSize / count);
+
+//     // console.log("pageSizepageSize",pageSize,"countcount",count)
+//     postParams.pageSize = Math.ceil(postParams.pageSize - pageSize)
+
+    
+//     app.postController.getPost(postParams, function (error, postsList) {
+//       if (error) {
+//         res.status(400).json({ error: error });
+//       }
+//       if (postsList.exists == false) {
+//         return res.status(400).json({ error: "invalid post params." });
+//       }
+//       else {
+
+//         var advPostCount = Math.floor(Math.random() * (5 - 3 + 1) + 3);
+//         var advPostParams = {
+//           radius: req.body.radius || 10,
+//           pageSize: Math.ceil(postParams.pageSize / advPostCount) || advPostCount,
+//           page: req.body.page || 0,
+//           user_id: req.user.user_id,
+//           longitude: req.body.longitude,
+//           latitude: req.body.latitude,
+//           fetchAdvertorialPost: true
+//         }
+        
+//         app.postController.getPost(advPostParams, function (error, advPostsList) {
+//           if (error) {
+//             res.status(400).json({ error: error });
+//           }
+//           // if (advPostsList.posts.exists == false) {
+//           //   return res.status(400).json({ error: "invalid post params." });
+//           // }
+//           else {
+//             console.log("advPostCount=",advPostCount,"advPostParams.pageSize=",advPostParams.pageSize,"advPostsList.posts.length",advPostsList.posts.length,"postsList.length",postsList.posts.length)
+//             var finalPosts = [];
+//                 if (postsList.posts.length > 0 && advPostsList.posts.length > 0) {
+//                   var chunkPosts = helpers.chunkArray(postsList.posts, advPostCount);
+//                   for (let i = 0, j = 0; i < chunkPosts.length, j < advPostsList.posts.length; i++, j++) {
+//                     if (chunkPosts[i]) {
+//                       chunkPosts[i].forEach(element => { finalPosts.push(helpers.getPostObject(element, req.user.user_id)) });
+//                     }
+//                     if (advPostsList.posts[j]) { finalPosts.push(helpers.getPostObject(advPostsList.posts[j], req.user.user_id)); }
+//                   }
+//                 }
+//                 else if(postsList.posts.length > 0 && advPostsList.posts.length == 0) {
+//                   for (let i = 0; i < postsList.posts.length; i++) {
+//                     finalPosts.push(helpers.getPostObject(postsList.posts[i], req.user.user_id));
+//                   }
+//                 }
+//                 else if(postsList.posts.length == 0 && advPostsList.posts.length > 0) {
+//                   for (let i = 0; i < advPostsList.posts.length; i++) {
+//                     finalPosts.push(helpers.getPostObject(advPostsList.posts[i], req.user.user_id));
+//                   }
+//                 }
+//                 var pagination = {
+//                   pageSize: postParams.pageSize,
+//                   nextPage: postParams.page + 1,
+//                   length: finalPosts.length,
+//                   totalCount: Number(postsList.postCount) + Number(advPostsList.postCount) 
+//                 }
+//                 // if(finalPosts.length > postParams.pageSize){
+//                 //   var foundIndex = finalPosts.findIndex(x => x.type === "VideoPosting");
+//                 // }
+//                 return res.json({ pagination: pagination, posts: finalPosts });
+//           }
+//         });
+//       }
+//     });
+//   }
+
+// });
+
+
+// Assuming app.postController.getPost and helpers.getPostObject are properly defined and imported
+
+postRouter.post('/post/get', auth, async (req, res) => {
+  if (!req.body.longitude || !req.body.latitude) {
+    return res.status(400).json({ error: "Location parameter missing." });
+  }
+
+  var postParams = {
+    radius: req.body.radius || 10,
+    pageSize: req.body.pageSize || 50,
+    page: req.body.page || 0,
+    user_id: req.user.user_id,
+    longitude: req.body.longitude,
+    latitude: req.body.latitude,
+    fetchAdvertorialPost: false // This is overridden in the promises below
+  };
+
+  try {
+    // Fetch both regular and advertorial posts
+    const [regularPosts, advertorialPosts] = await Promise.all([
+      new Promise((resolve, reject) => {
+        app.postController.getPostForUser({ ...postParams, fetchAdvertorialPost: false }, (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        });
+      }),
+      new Promise((resolve, reject) => {
+        app.postController.getPostForUser({ ...postParams, fetchAdvertorialPost: true }, (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        });
+      })
+    ]);
+
+    // Interleave regular and advertorial posts
+     let finalPosts = [];    
+    const combinedPosts = [...regularPosts.posts, ...advertorialPosts.posts];
+    //combinedPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const startIndex = postParams.page * postParams.pageSize;
+    
+    const paginatedPosts = combinedPosts.slice(startIndex, startIndex + postParams.pageSize);
+
+    for (let i = 0; i < paginatedPosts.length; i++) {
+        finalPosts.push(helpers.getPostObject(paginatedPosts[i], req.user.user_id));
+       
+      }
+      
+      var pagination = {
+      pageSize: postParams.pageSize,
+      nextPage: postParams.page + 1,
+      length: finalPosts.length,
+      totalCount: regularPosts.postCount + advertorialPosts.postCount
+    };
+
+    return res.json({ pagination: pagination, posts: finalPosts });
+  } catch (error) {
+    console.error(error); // Logging the error can help in debugging
+    return res.status(400).json({ error: "An error occurred fetching posts." });
+  }
+});
+
+
+
+
+
+
+postRouter.get('/post/get/:postId', auth, (req, res) => {
+  if (!req.params.postId) {
+    return res.status(400).json({ error: "post Id missing." });
+  }
+  else {
+    return getPostById(req.params.postId, req.user.user_id, "Post Found", res);
+  }
+});
+
+postRouter.get('/post/getMedia/:mediaId', (req, res) => { 
+  if (!req.params.mediaId) {
+    return res.status(400).json({ error: "post image Id missing." });
+  }
+  else {
+    app.postController.getPostImageById(req.params.mediaId, function (error, postImageData) {
+      if (error) {
+        return res.status(400).json({ error: error });
+      }
+      else if (postImageData.exists == false) {
+        return res.status(400).json({ error: "invalid post id" });
+      }
+      else {
+        var directory = './uploads/images/uploads/';
+        if(postImageData.mediaType.includes('video/')) {
+          directory = './uploads/videos/uploads/';
+        }
+        var path = directory + postImageData.mediaUrl.split(/[/ ]+/).pop();
+        try {
+          var img = fs.readFileSync(path);
+          res.writeHead(200, { 'Content-Type': postImageData.mediaType });
+          res.end(img, 'binary');
+        } catch(ex) {
+
+          // var img = fs.readFileSync('./uploads/images/uploads/6c9f55a6c86f88931640800786164.png');
+          var img = fs.readFileSync('./uploads/images/default/download.png');
+          //res.writeHead(200, { 'Content-Type': 'image/png' });
+          res.type('png')
+          res.status(200).send(img);
+        }
+      }
+    });
+  }
+});
+
+
+postRouter.get('/user/profilePic/:userId', async (req, res) => {
+  if (!req.params.userId) {
+    return res.status(400).json({ error: "User Id missing." });
+  }
+  else {
+    app.databaseController.checkUserExistsById(req.params.userId, async function (error, userData) {
+      if (error) {
+        return res.status(400).json({ error: error });
+      }
+      else if (userData.exists == false) {
+        return res.status(400).json({ error: "invalid user id" });
+      }
+      else {
+        try {
+          var directory = './uploads/images/uploads/';
+          if(userData.contactPerson.profilePic != "") 
+          {
+            var path = directory + userData.contactPerson.profilePic.split(/[/ ]+/).pop();
+            try {
+            //  console.log(userData.email) 
+              var img = fs.readFileSync(path);
+              res.writeHead(200, { 'Content-Type': 'image/png' });
+              return res.end(img, 'binary');
+            } catch (ex) {
+              // var img = fs.readFileSync('./uploads/images/uploads/6c9f55a6c86f88931640800786164.png');
+              var img = fs.readFileSync('./uploads/images/default/download.png');
+          //res.writeHead(200, { 'Content-Type': 'image/png' });
+            res.type('png')
+            res.status(200).send(img);
+            }
+          }
+          else {
+            return res.status(404).json({ error: "No Image found" });
+          }
+        } catch (error) {
+          return res.status(404).json({ error: "No Image found" });
+        }
+      }
+    });
+  }
+});
+
+
+
+//Partner companyLogo
+postRouter.get('/partner/getCompanylogo/:partnerId', async (req, res) => {
+  if (!req.params.partnerId) {
+    return res.status(400).json({ error: "partnerId missing." });
+  }
+  else {   
+    app.partnerController.getPartnerByPartnerId (req.params.partnerId, async function (error, partnerData) {
+      if (error) {
+        return res.status(400).json({ error: error });
+      }
+      else if (partnerData.exists == false) {
+        return res.status(400).json({ error: "invalid partnerData id" });
+      }
+      else {
+        try {
+          var directory = './uploads/images/uploads/';
+          if(partnerData.companyLogo != "") 
+          {
+            var path = directory + partnerData.companyLogo.split(/[/ ]+/).pop();
+            try {
+            //  console.log(userData.email) 
+              var img = fs.readFileSync(path);
+              res.writeHead(200, { 'Content-Type': 'image/png' });
+              return res.end(img, 'binary');
+            } catch (ex) {
+              // var img = fs.readFileSync('./uploads/images/uploads/6c9f55a6c86f88931640800786164.png');
+              var img = fs.readFileSync('./uploads/images/default/download.png');
+          //res.writeHead(200, { 'Content-Type': 'image/png' });
+            res.type('png')
+            res.status(200).send(img);
+            }
+          }
+          else {
+            return res.status(404).json({ error: "No Image found" });
+          }
+        } catch (error) {
+          return res.status(404).json({ error: "No Image found" });
+        }
+      }
+    });
+  }
+});
+
+postRouter.post('/post/share', auth, (req, res) => {
+  if (!req.body.postId) {
+    res.status('400').json({ error: "Post Id Missing" });
+  }
+  else {
+    app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
+      if (error) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else if (existedPost.exists == false) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else {
+        app.databaseController.checkUserExistsById(req.user.user_id, function (error, existedUser) {
+          if (error) {
+            res.status('400').json({ error: "Invalid user" });
+          }
+          else if (existedUser.exists == false) {
+            res.status('400').json({ error: "Invalid user" });
+          }
+          else {
+            existedPost.shareDetails.originalPostId = existedPost._id;
+            existedPost.shareDetails.sharedBy = req.user.user_id;
+            existedPost.shareDetails.sharedOn = new Date();
+            existedPost.isSharedPost = true;
+            app.postController.createSharedPost(existedPost, function (error, createdPost) {
+              if (error || !createdPost) {
+                return res.status(500).json({ error: error });
+              }
+              else {
+                let contentObj = {
+                  contentId : createdPost._id,
+                  contentType : "Post",
+                  contentSubType : existedPost.type,
+                }
+                app.postController.createContent(contentObj, function (error, createdPostContent) {
+                  if (error || !createdPostContent) {
+                    return res.status(500).json({ error: error });
+                  }
+                  else {
+                    return getPostById(createdPost._id, req.user.user_id, "Shared Post Created", res);
+                  }
+                })
+              }
+            });
+
+          }
+        })
+      }
+    });
+  }
+});
+
+postRouter.delete('/post/delete/:postId', auth, (req, res) => {
+  if(!req.params.postId) {
+    res.status('400').json({ error: "Post Id Missing" });
+  }
+  else {
+    app.postController.checkPostExistsById(req.params.postId, function (error, existedPost) {
+      if (error) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else if (existedPost.exists == false) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else {
+        // console.log(existedPost)
+        if(existedPost.postedBy == req.user.user_id) {
+          existedPost.status = 'Deleted';
+          existedPost.deletedOn = new Date();
+          existedPost.deletedBy = req.user.user_id;
+          app.postController.updatePost(existedPost, function (error, createdPost) {
+            if (error || !createdPost) {
+              return res.status(500).json({ error: error });
+            }
+            else {
+
+              // Delete Post Comment and Post Images
+              app.postController.updatePostImageByPostId(existedPost._id, function(error, updatedPostComments){
+                // if (error || !createdPost) {
+                //   return res.status(500).json({ error: error });
+                // }
+                // else {
+                //   return res.status(200).json({ status: "true", message: "Post Deleted" });
+                // }
+              });
+
+              app.postController.updatePostCommentByPostId(existedPost._id, function(error, updatedPostComments){
+                if (error || !createdPost) {
+                  return res.status(500).json({ error: error });
+                }
+                else {
+                  app.postController.deleteContentByContentId(existedPost._id, function(error, updatedPostContent){
+                    if (error || !updatedPostContent) {
+                      return res.status(500).json({ error: error });
+                    }else {
+                      return res.status(200).json({ status: "true", message: "Post Deleted" });
+                    }
+                  })
+
+                }
+              })
+              
+            }
+          });
+        }
+        else {
+          res.status(401).json({ error: "Not authorised to delete this post" });
+
+        }
+      }
+    });
+  }
+});
+
+
+postRouter.delete('/post/delete_portal/:postId', auth, (req, res) => {
+  if(!req.params.postId) {
+    res.status('400').json({ error: "Post Id Missing" });
+  }
+  else {
+    app.postController.checkPostExistsById(req.params.postId, function (error, existedPost) {
+      if (error) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else if (existedPost.exists == false) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else {
+        // console.log(existedPost)
+          existedPost.status = 'Deleted';
+          existedPost.deletedOn = new Date();
+          existedPost.deletedBy = req.user.user_id;
+          app.postController.updatePost(existedPost, function (error, createdPost) {
+            if (error || !createdPost) {
+              return res.status(500).json({ error: error });
+            }
+            else {
+
+              // Delete Post Comment and Post Images
+              app.postController.updatePostImageByPostId(existedPost._id, function(error, updatedPostComments){
+                // if (error || !createdPost) {
+                //   return res.status(500).json({ error: error });
+                // }
+                // else {
+                //   return res.status(200).json({ status: "true", message: "Post Deleted" });
+                // }
+              });
+
+              app.postController.updatePostCommentByPostId(existedPost._id, function(error, updatedPostComments){
+                if (error || !createdPost) {
+                  return res.status(500).json({ error: error });
+                }
+                else {
+                  app.postController.deleteContentByContentId(existedPost._id, function(error, updatedPostContent){
+                    if (error || !updatedPostContent) {
+                      return res.status(500).json({ error: error });
+                    }else {
+                      return res.status(200).json({ status: "true", message: "Post Deleted" });
+                    }
+                  })
+                }
+              })
+              
+            }
+          });
+      }
+    });
+  }
+});
+
+postRouter.post('/post/updateInfluencerPost', auth, (req, res) => {
+
+  console.log("########Req Body",req.body)
+
+  let uploadMedia = multer({ storage: helpers.mediaStorage, fileFilter: validator.postMediaFilter }).any();
+  uploadMedia(req, res, function (err) {
+    if (req.fileValidationError) {
+      return res.send(req.fileValidationError);
+    } else if (err instanceof multer.MulterError) {
+      return res.send(err);
+    } else if (err) {
+      return res.send(err);
+    }
+
+    if(!req.body.postId) {
+      res.status('400').json({ error: "Post Id Missing" });
+    }else {
+      app.postController.checkInfluencerPostExistsById(req.body.postId, function (error, existedPost) {
+        if (error) {
+          res.status('400').json({ error: "Invalid post" });
+        }else if (existedPost.exists == false) {
+          res.status('400').json({ error: "Invalid post" });
+        }else {
+          var postedImages = [];
+
+          for (index = 0; index < req.files.length; index++) {
+            postedImages.push({ mediaUrl: path.join(__dirname, req.files[index].path), mediaType: req.files[index].mimetype });
+          }
+
+          console.log("###postedImages :",postedImages)
+
+          app.postController.addPostImages(req.body.postId,postedImages, function (error, updatePostImages) {
+            if (error) {
+              res.status('400').json({ error: "Invalid post" });
+            }else if (updatePostImages.exists == false) {
+              res.status('400').json({ error: "Invalid post" });
+            }else {
+              existedPost.hashtags = req.body.postHastags
+              //console.log("###hashtags :",hashtags);
+              app.postController.updatePost(existedPost, function (error, updatePost) {
+                if (error || !updatePost) {
+                  return res.status(500).json({ error: error });
+                }else {
+                  return res.status(200).json({ status: "true", message: "Post updated successfully" });
+                }
+              })
+            }
+            })
+        }
+      })
+    }
+  })
+})
+
+
+
+postRouter.put('/post/edit', auth, (req, res) => {
+  if(!req.body.postId) {
+    res.status('400').json({ error: "Post Id Missing" });
+  }
+  else {
+    app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
+      if (error) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else if (existedPost.exists == false) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else {
+        if(existedPost.postedBy == req.user.user_id) {
+          if(req.body.hashTags) {
+            existedPost.hashtags = req.body.hashTags ;
+          }
+          if(req.body.postTitle) {
+            existedPost.postTitle = req.body.postTitle; 
+          }
+          if(req.body.postDescription) {
+            existedPost.postDescription = req.body.postDescription; 
+          }
+          if(req.body.latitude) {
+            existedPost.latitude = req.body.latitude;
+          }
+          if(req.body.longitude) {
+            existedPost.longitude = req.body.longitude;
+          }
+          if(req.body.isAdvertorialPost) {
+            existedPost.isAdvertorialPost =  req.body.isAdvertorialPost;
+          }
+          if(req.body.dataPrivacyRule) {
+            existedPost.dataPrivacyRule = req.body.dataPrivacyRule;
+          }
+          if(req.body.category) {
+            existedPost.category = req.body.category;
+          } 
+          if(req.body.fontColor) {
+            existedPost.fontColor = req.body.fontColor;
+          }
+          if(req.body.bgColor) {
+            existedPost.backgroundColor = req.body.bgColor;
+          }
+          if(req.body.type) {
+            existedPost.type = req.body.type;
+          }
+          existedPost.updatedOn = new Date();
+          existedPost.updatedBy = req.user.user_id;
+          app.postController.updatePost(existedPost, function (error, updatedPost) {
+            if (error || !updatedPost) {
+              return res.status(500).json({ error: error });
+            }
+            else {
+              return getPostById(existedPost._id, req.user.user_id, "Post Updated", res);
+            }
+          });
+        }
+        else {
+          res.status('401').json({ error: "Not authorised to update this post" });
+        }
+      }
+    });
+  }
+});
+
+postRouter.put('/post/updateStatus', auth, (req, res) => {
+  let validStatus = ["Active", "Pause", "Deleted", "Deactivate", "Block"]
+  if(!req.body.postId) {
+    return res.status('400').json({ error: "Post Id Missing" });
+  }
+  if(!req.body.status) {
+    return res.status('400').json({ error: "Post Status Missing" });
+  }
+  else if(!validStatus.includes(req.body.status)) {
+    return res.status('400').json({ error: "Post Status invalid" });
+  }
+  else {
+    app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
+      if (error) {
+        return res.status('400').json({ error: "Invalid post" });
+      }
+      else if (existedPost.exists == false) {
+        return res.status('400').json({ error: "Invalid post" });
+      }
+      else {
+        existedPost.status = req.body.status;
+        existedPost.updatedOn = new Date();
+        existedPost.updatedBy = req.user.user_id;
+         app.postController.updatePost(existedPost, function (error, updatedPost) {
+          if (error || !updatedPost) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            if(req.body.status == "Deleted"){
+              app.postController.deleteContentByContentId(existedPost._id, function(error, updatedPostContent){
+                if (error || !updatedPostContent) {
+                  return res.status(500).json({ error: error });
+                }else {
+                  return getPostById(existedPost._id, req.user.user_id, "Post Status Updated", res);
+                }
+              })
+            }else{
+
+              return getPostById(existedPost._id, req.user.user_id, "Post Status Updated", res);
+            }
+          }
+        });
+      }
+    });
+  }  
+  
+});
+
+postRouter.post('/post/bookmarkedList', auth, (req, res) => {
+  
+  if(req.body.postalCode) {
+    //get lat long from postal code
+    geocoder.geocode(req.body.postalCode, function(error, data) {
+      if(error) {
+        debug("post/bookmarkedList geocode error ", error);
+        return res.status(500).json({error: error})
+      }
+      else {
+        debug("post/bookmarkedList geocode data ", data);
+        let listFilter = {
+            bookmarkedBy: req.body.userId || req.user.user_id,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            radius: req.body.radius || 10,
+            pageSize: req.body.pageSize || 50,
+            page: req.body.page || 0,
+            mediaOnly: req.body.mediaOnly || false,
+            isAdvertorialPost: req.body.isAdvertorialPost || false
+        }
+        app.postController.getBookmarkedPost(listFilter , function(error, posts) {
+          if (error) {
+            res.status(400).json({ error: error });
+          }
+          else {
+            let finalPosts = [];
+            posts.forEach( x=> finalPosts.push(helpers.getPostObject(x, req.user.user_id)));
+            let message = "Bookmarked posts found"
+            if(finalPosts.length == 0){
+              message = "Bookmarked posts not found"
+            }
+            return res.status(200).json({ status: "true", message: message, data: finalPosts });
+          }
+        });
+      }
+    });
+  }
+  else {
+    let bookmarkFilter = {
+      bookmarkedBy: req.body.userId || req.user.user_id, 
+      mediaOnly: req.body.mediaOnly || false,
+      isAdvertorialPost: req.body.isAdvertorialPost || false,
+      pageSize: req.body.pageSize || 50,
+      page: req.body.page || 0,
+      viewBy: req.body.viewBy || ''
+    };
+
+    app.postController.getBookmarkedPost(bookmarkFilter , function(error, posts) {
+      if (error) {
+        res.status(400).json({ error: error });
+      }
+      else {
+        let finalPosts = [];
+        posts.forEach( x=> finalPosts.push(helpers.getPostObject(x, req.user.user_id)));
+        let message = "Bookmarked posts found"
+            if(finalPosts.length == 0){
+              message = "Bookmarked posts not found"
+            }
+        return res.status(200).json({ status: "true", message: message, data: finalPosts });
+      }
+    });
+  }
+});
+
+
+postRouter.get('/post/hide/:postId', auth, (req, res) => {
+  if(!req.params.postId) {
+    res.status('400').json({ error: "Post Id Missing" });
+  }
+  else {
+    app.postController.checkPostExistsById(req.params.postId, function (error, existedPost) {
+      if (error) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else if (existedPost.exists == false) {
+        res.status('400').json({ error: "Invalid post" });
+      }
+      else {
+        if(existedPost.postedBy == req.user.user_id) {
+          res.status('401').json({ error: "unable to hide this user" });
+        }
+        else {
+          let hiddenUserJson = {
+            userId: req.user.user_id,
+            hiddenUser: existedPost.postedBy 
+          }
+          app.userController.addHiddenUser(hiddenUserJson, function(error, hiddenPost) {
+            if(error || !hiddenPost) {
+              res.status('400').json({ error: error });
+            }
+            else {
+              return res.status(200).json({ status: "true", message: "User's Post Hidden ", data: hiddenPost });
+            }
+          });
+        }
+      }
+    });
+  }
+});
+
+postRouter.get('/post/snooze/:postId', auth, (req, res) => {
+  // console.log("/post/snooze_1 ", req);
+  // console.log("/post/snooze ", req.user);
+  if(!req.params.postId) {
+    res.status('400').json({ error: "Post Id Missing" });
+  }
+  else {
+    //console.log("post Snooze...")
+    app.postController.checkPostExistsById(req.params.postId, function (error, existedPost) {
+      
+    //console.log("post Snooze...1", error, existedPost);
+      if (error) {
+        return res.status('500').json({ error: erorr});
+      }
+      else if (existedPost.exists == false) {
+        return res.status('400').json({ error: "Invalid post" });
+      }
+      else {
+        // console.log(req.user);
+        if(req.user!= undefined && existedPost.postedBy == req.user.user_id) {
+          res.status('401').json({ error: "own post cannot be snoozed." });
+        }
+        else {
+          let snoozeUserJson = {
+            userId: req.user!= undefined ? req.user.user_id : '',
+            snoozedUser: existedPost.postedBy 
+          }
+          // console.log("snoozeUserJson ", snoozeUserJson);
+          app.userController.createUserSnoozedAccount(snoozeUserJson, function(error, snoozedPost) {
+            if(error || !snoozedPost) {
+              res.status('500').json({ error: error });
+            }
+            else {
+              return res.status(200).json({ status: "true", message: "User's Post Snoozed", data: snoozedPost });
+            }
+          });
+        }
+      }
+    });
+  }
+});
+
+//Post Comments
+
+postRouter.post('/post/comment/add', auth, (req, res) => {
+  if (!req.body.postId) {
+    return res.status(400).json({ error: "invalid post id." });
+  }
+  if (!req.body.comment || req.body.comment.length == 0) {
+    return res.status(400).json({ error: "invalid comment." });
+  }
+  app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
+   
+    // console.log("existedPost ", existedPost)
+    if (error) {
+      res.json({ error: error });
+    }
+    else if (existedPost.exists == false) {
+      return res.status(400).json({ error: "invalid post id." });
+    }
+    else if(existedPost.commentAllowed == false) {
+      return res.status(400).json({ error: "comments are not allowed on this post." });
+    }
+    else {
+      var postCommentJson = {
+        postId: req.body.postId,
+        comment: req.body.comment,
+        commentedBy: req.user.user_id
+      };
+      app.postController.createPostComment(postCommentJson, function (error, createdPostComment) {
+        if (error || !createdPostComment) {
+          return res.status(500).json({ error: error });
+        }
+        else {
+
+          debug(req.user);
+          return res.status(200).json({ status: "true", message: "Post Comment Created", data: [helpers.getPostCommentObject(createdPostComment,req.user)] });
+
+        }
+      });
+    }
+  });
+
+});
+
+postRouter.post('/post/comment/addReply', auth, (req, res) => {
+  if (!req.body.commentId) {
+    return res.status(400).json({ error: "invalid comment id." });
+  }
+  if (!req.body.comment || req.body.comment.length == 0) {
+    return res.status(400).json({ error: "invalid comment." });
+  }
+  app.postController.checkPostCommentExistsById(req.body.commentId, function (error, existedPostComment) {
+    if (error) {
+      res.json({ error: error });
+    }
+    if (existedPostComment.exists == false) {
+      return res.status(400).json({ error: "invalid comment id." });
+    }
+    else {
+      var postCommentReplyJson = {
+        commentId: req.body.commentId,
+        comment: req.body.comment,
+        commentedBy: req.user.user_id
+      };
+      app.postController.createPostCommentReply(existedPostComment, postCommentReplyJson, function (error, createdPostCommentReply) {
+        if (error || !createdPostCommentReply) {
+          return res.status(500).json({ error: error });
+        }
+        else {
+          
+          app.postController.getPostComment(existedPostComment.postId, function (error, postComments) {
+            if (error) {
+              res.status(400).json({ error: error });
+            }
+            else {
+              var comments = [];
+              // postComments.forEach(x => {
+              //   comments.push(helpers.getPostCommentObject(x, req.user));
+              // });
+              // let message = "Post Comment Reply Created";
+              // if(comments.length == 0){
+              //   message = "Post Comment Reply not Created";
+              // }
+
+              comments = postComments;
+              let message = "Post Comment Reply Created";
+              if(comments.length == 0){
+                message = "Post Comment Reply not Created";
+              }
+
+
+              return res.status(200).json({ status: "true", message: message, data: comments });
+            }
+      });
+        }
+      });
+    }
+});
+});
+
+postRouter.get('/post/getReportedPost/:userId', auth, (req, res) => {
+  if (!req.params.userId) {
+    res.status(400).json({ error: "user id is missing" });
+  }
+  else {
+    app.postController.getPostList({postedBy: req.params.userId, isReported: true}, function(error, postList) {
+      if (error || !postList) {
+        return res.status(400).json({ error: error });
+      }
+      else {
+        finalPosts = [];
+        postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id)));
+        let message = "Post List";
+        if(finalPosts.length == 0){
+          message = "Post List not found";
+        }
+        return res.status(200).json({ status: "true", message: message, data: finalPosts });
+    
+      }
+    });
+  }
+});
+
+postRouter.get('/post/comment/get/:postId', auth, (req, res) => {
+  if (!req.params.postId) {
+    res.status(400).json({ error: "Post id is missing" });
+  }
+  else {
+    //get Post Comments 
+    app.postController.getPostComment(req.params.postId, function (error, postComments) {
+      if (error) {
+        res.status(400).json({ error: error });
+      }
+      else {
+        var comments = [];
+        postComments.forEach(x => {
+          comments.push(helpers.getPostCommentObject(x, req.user));
+
+        });
+        if(comments.length != 0){
+          return res.status(200).json({ status: "true", message: "Post Comments Found", data: comments });
+        }else{
+          return res.status(200).json({ status: "true", message: "Post Comments Not Found", data: comments });
+        }
+      }
+
+    });
+  }
+});
+
+postRouter.get('/post/comment/getReplyComment/:commentId', auth, (req, res) => {
+  if (!req.params.commentId) {
+    res.status(400).json({ error: "Comment id is missing" });
+  }
+  else {
+    //get Post Comment Replies 
+    app.postController.getPostCommentReplies(req.params.commentId, function (error, postCommentReplies) {
+      if (error) {
+        res.status(400).json({ error: error });
+      }
+      else {
+        var comments = [];
+        // console.log(JSON.stringify(postCommentReplies));
+        postCommentReplies.forEach(x => {
+          x.replyComment.forEach(rc => {
+            comments.push(helpers.getPostCommentObject(rc, req.user));
+          })
+        });
+        let message = "Post Comment Replies Found";
+        if(comments.length == 0){
+          message = "Post Comment Replies not Found";
+        }
+        return res.status(200).json({ status: "true", message: message, data: comments });
+      }
+
+    });
+  }
+});
+
+postRouter.delete('/post/comment/delete/:postCommentId', auth, (req, res) => {
+  if(!req.params.postCommentId) {
+    return res.status(400).json({ error: "invalid comment id." });
+  }
+  else {
+  app.postController.checkPostCommentExistsById(req.params.postCommentId, function (error, existedPostComment) {
+    if (error) {
+      res.status(400).json({ error: error });
+    }
+    if (existedPostComment.exists == false) {
+      return res.status(400).json({ error: "invalid comment id." });
+    }
+    else {
+      if(existedPostComment.commentedBy == req.user.user_id && existedPostComment.status == "Active") {
+        existedPostComment.status = "Deleted";
+        existedPostComment.deletedOn = new Date();
+        existedPostComment.deletedBy = req.user.user_id;
+        existedPostComment.replyComment.forEach(x => {
+          x.status = "Deleted";
+          x.deletedOn = new Date();
+          x.deletedBy = req.user.user_id;
+        });
+        app.postController.updatePostComment(existedPostComment, function(error, updatedPostComment) {
+          if (error) {
+            res.status(400).json({ error: error });
+          }
+          else {
+            return res.status(200).json({ status: "true", message: "Post Comment Deleted", data: updatedPostComment });
+          }
+        });
+      }
+      else {
+        return res.status(401).json({ error: "not authorised to delete comment." });
+      }
+    }
+  });
+  }
+});
+
+postRouter.put('/post/comment/update', auth, (req, res) => {
+  if(!req.body.postCommentId) {
+    return res.status(400).json({ error: "invalid comment id." });
+  }
+  if(!req.body.comment) {
+    return res.status(400).json({ error: "invalid comment." });
+  }
+  else {
+  app.postController.checkPostCommentExistsById(req.body.postCommentId, function (error, existedPostComment) {
+    if (error) {
+      res.status(400).json({ error: error });
+    }
+    if (existedPostComment.exists == false) {
+      return res.status(400).json({ error: "invalid comment id." });
+    }
+    else {
+      if(existedPostComment.commentedBy == req.user.user_id && existedPostComment.replyComment.length == 0 && existedPostComment.status == "Active") {
+        existedPostComment.comment = req.body.comment;
+        existedPostComment.updatedOn = new Date();
+        existedPostComment.updatedBy = req.user.user_id;
+        app.postController.updatePostComment(existedPostComment, function(error, updatedPostComment) {
+          if (error) {
+            res.status(400).json({ error: error });
+          }
+          else {
+            return res.status(200).json({ status: "true", message: "Post Comment Updated", data: [helpers.getPostCommentObject(updatedPostComment, req.user)] });
+          }
+        });
+      }
+      else {
+        if(existedPostComment.replyComment.length > 0) {
+          return res.status(400).json({ error: "This comment has replies, so can't be updated." });
+        }
+        else if(existedPostComment.commentedBy != req.user.user_id) {
+          return res.status(400).json({ error: "You can update only your comment." });
+        }
+        else if(existedPostComment.status != "Active") {
+          return res.status(400).json({ error: "Invalid comment Id." });
+        }
+      }
+    }
+  });
+  }
+});
+
+postRouter.get('/post/comment/preventComment/:postId', auth, (req, res) => {
+  if(!req.params.postId) {
+   return res.status(400).json({ error: "Post id is missing" });
+  }
+  app.postController.checkPostExistsById(req.params.postId, function (error, existedPost) {
+    if (error) {
+      return res.status('400').json({ error: "Invalid post" });
+    }
+    else if (existedPost.exists == false) {
+      return res.status('400').json({ error: "Invalid post" });
+    }
+    else {
+      existedPost.commentAllowed = false;;
+      existedPost.updatedOn = new Date();
+      existedPost.updatedBy = req.user.user_id;
+       app.postController.updatePost(existedPost, function (error, updatedPost) {
+        if (error || !updatedPost) {
+          return res.status(500).json({ error: error });
+        }
+        else {
+          return getPostById(existedPost._id, req.user.user_id, "Post Comment Prevented", res);
+        }
+      });
+    }
+  });
+
+});
+//Post Comments
+
+//Posts
+postRouter.post('/post/list', auth, async (req, res) => {
+  let filter = {
+    pageSize: req.body.pageSize || 50,
+    page: req.body.page || 0,
+    postedBy: req.body.userId || '', 
+    sortOrder: req.body.sortOrder, 
+    sortBy: req.body.sortBy, 
+    fromDate: req.body.fromDate, 
+    toDate: req.body.toDate,
+    Categories: req.body.Categories || '',
+    partnerId: req.body.partnerId || '',
+    panalties:'false'
+  }
+app.postController.getPostList( filter, function(error, postList) {
+   if (error || !postList) {
+    return res.status(400).json({ error: error });
+  }
+  else {
+    finalPosts = [];
+    app.databaseController.checkUserExistsById(req.user.user_id, async function (error, userData) {
+      if (error) {
+        return res.status(400).json({ error: error });
+      }
+      else if (userData.exists == false) {
+        return res.status(400).json({ error: "invalid user id" });
+      }
+      else {
+        for(let i=0; i<postList.posts.length; i++){
+          let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, userData)
+          finalPosts.push(x)
+        }
+        // postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
+        let message = "Post List";
+        if(finalPosts.length == 0){
+          message = "Post List not found";
+        }
+        return res.status(200).json({ status: "true", message: message, data: {finalPosts,totalCount:postList.postCount} });
+      } 
+    });
+
+  }
+});
+});
+
+
+postRouter.post('/reported_post/list', auth, async (req, res) => {
+  let filter = {
+    partnerInfluencerId : req.body.partnerInfluencerId || "",
+    pageSize: req.body.pageSize || 50,
+    page: req.body.page || 0,
+    postedBy: req.body.userId || "",
+    sortOrder: req.body.sortOrder,
+    sortBy: req.body.sortBy,
+    fromDate: req.body.fromDate || '',
+    toDate: req.body.toDate || '',
+    Categories: req.body.Categories || '',
+    status: req.body.status || 'ToBeChecked',
+    partnerId: req.body.partnerId || ''
+  }
+  app.postController.getRepoartedPostList(filter, function (error, postList) {
+    if (error || !postList) {
+      return res.status(400).json({ error: error });
+    }
+    else {
+      finalPosts = [];
+      app.databaseController.checkUserExistsById(req.user.user_id, async function (error, userData) {
+        if (error) {
+          return res.status(400).json({ error: error });
+        }
+        else if (userData.exists == false) {
+          return res.status(400).json({ error: "invalid user id" });
+        }
+        else {
+          // for (let i = 0; i < postList.posts.length; i++) {
+          //   let x = await helpers.getPostObject2(postList.posts[i], req.user.userId, userData)
+          //   finalPosts = await Promise.all(postList.posts.map(post => helpers.getPostObject2(post, req.user.userId, userData)));
+          //   finalPosts.push(x)
+          // }          
+          // postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
+          const finalPosts = await Promise.all(postList.posts.map(post => helpers.getPostObject2(post, req.user.userId, userData)));
+          let message = "Post List";
+          if(finalPosts.length == 0){
+            message = "Post List not found";
+          }
+          return res.status(200).json({ status: "true", message: message, data: { finalPosts, totalCount: postList.postCount } });
+        }
+      });
+
+    }
+  });
+});
+
+
+postRouter.post('/post/photoRoll', auth, (req, res) => {
+  app.postController.getPostList({postedBy: req.user.user_id, imagePostOnly: true }, function(error, postList) {
+    if (error || !postList) {
+      return res.status(400).json({ error: error });
+    }
+    else {
+      finalPosts = [];
+      app.databaseController.checkUserExistsById(req.user.user_id, function (error, userData) {
+        if (error) {
+          return res.status(400).json({ error: error });
+        }
+        else if (userData.exists == false) {
+          return res.status(400).json({ error: "invalid user id" });
+        }
+        else {
+      postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
+      let message = "Photo Roll List";
+      if(finalPosts.length == 0){
+        message = "Photo Roll List not found";
+      }
+      return res.status(200).json({ status: "true", message: message, data: finalPosts });
+    }});
+    }
+  });
+});
+postRouter.post('/post/photoAlbum', auth, (req, res) => {
+  // if(!req.body.radius) {
+  //   return res.status(400).json({ error: "radius is missing." });
+  // }
+  if(!req.body.postalCode) {
+    return res.status(400).json({ error: "postal code is missing." });
+  }
+  //get lat long from postal code
+  geocoder.geocode(req.body.postalCode, function(error, data) {
+    if(error) {
+      debug("photoAlbum geocode error ", error);
+    }
+    else {
+      debug("photoAlbum geocode data ", data);
+      let _listFilter = {
+        latitude: data.latitude,
+        longitude: data.longitude,
+        radius: req.body.radius || 10,
+        pageSize: req.body.pageSize || 50,
+        page: req.body.page || 0,
+        user_id: req.user.user_id,
+        fetchAdvertorialPost: false,
+        fromDate: req.body.fromDate,
+        toDate: req.body.toDate
+    }
+    app.postController.getLikedPost(_listFilter, function(error, likedPostList) {
+      if (error) {
+        return res.status(400).json({ error: error });
+      }
+      else {
+        app.partnerController.getLikedPartner(_listFilter, function(error, likedPartnerList) {
+          if(error) {
+            return res.status(400).json({ error: error });
+          }
+          else {
+            var finalPosts = [];
+            for (let i = 0; i < likedPostList.length; i++) {
+              if(likedPostList[i].postImages.length > 0) {
+                finalPosts.push(helpers.getPostObject(likedPostList[i], req.user.user_id));
+              }
+            }
+            var pagination = {
+              pageSize: _listFilter.pageSize,
+              nextPage: _listFilter.page + 1,
+              postLength: finalPosts.length,
+              partnerLength: likedPartnerList.length
+            }
+            let message = "Posts found";
+            if(finalPosts.length == 0 && likedPartnerList.length == 0){
+              message = "Posts not found";
+            }
+            return res.status(200).json({status: true, message: message, 
+            data:{ pagination: pagination, posts: finalPosts, partners: likedPartnerList }});
+          }
+        });
+      }
+    });
+    }
+  });
+});
+
+postRouter.post('/post/getAllPosts', auth ,(req, res) => { 
+  let Obj = {
+    pageSize: req.body.pageSize || 10,
+    page: req.body.page || 0,
+    fromDate : req.body.fromDate || '',
+    toDate : req.body.toDate || '',
+    Categories : req.body.Categories || ''
+  }
+  app.postController.getPostList( Obj, function(error, postList) {
+    if (error || !postList) {
+     return res.status(400).json({ error: error });
+   } else {
+     finalPosts = [];
+     app.databaseController.checkUserExistsById(req.user.user_id, async function (error, userData) {
+       if (error) {
+         return res.status(400).json({ error: error });
+       } else if (userData.exists == false) {
+         return res.status(400).json({ error: "invalid user id" });
+       } else {
+         for(let i=0; i<postList.posts.length; i++){
+           let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, userData)
+           finalPosts.push(x)
+         }
+        //  postList.posts.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
+        let message = "Post List";
+        if(finalPosts.length == 0){
+          message = "Post List not found";
+        }
+         return res.status(200).json({ status: "true", message: message, data: {finalPosts:finalPosts,totalCount:postList.postCount} });
+       } 
+     });
+ 
+   }
+ });
+
+
+});
+
+postRouter.post('/post/getPublic', (req, res) => {
+  if(!req.body.longitude || !req.body.latitude) {
+    res.status(400).json({error : "Location parameter missing."});
+  }
+  else {
+    var postParams = {
+      radius: req.body.radius || 10,
+      pageSize: req.body.pageSize || 50,
+      page: req.body.page || 0,
+      // user_id: req.user.user_id,
+      longitude: req.body.longitude,
+      latitude: req.body.latitude,
+      fetchAdvertorialPost: false,
+      viewBy: req.body.viewBy || ''
+    }
+    app.postController.getPublicPost(postParams, function (error, postsList) {
+      if (error) {
+        res.status(400).json({ error: error });
+      }
+      if (postsList.exists == false) {
+        return res.status(400).json({ error: "invalid post params." });
+      }
+      else {
+
+        var advPostCount = Math.floor(Math.random() * (5 - 3 + 1) + 3);
+        var advPostParams = {
+          radius: req.body.radius || 10,
+          pageSize: Math.ceil(postParams.pageSize / advPostCount) || advPostCount,
+          page: req.body.page || 0,
+          // user_id: req.user.user_id,
+          longitude: req.body.longitude,
+          latitude: req.body.latitude,
+          fetchAdvertorialPost: true
+        }
+        app.postController.getPublicPost(advPostParams, function (error, advPostsList) {
+          if (error) {
+            res.status(400).json({ error: error });
+          }
+          // if (advPostsList.exists == false) {
+          //   return res.status(400).json({ error: "invalid post params." });
+          // }
+          else {
+            var finalPosts = [];
+                if (postsList.length > 0 && advPostsList.length > 0) {
+                  var chunkPosts = helpers.chunkArray(postsList, advPostCount);
+                  for (let i = 0, j = 0; i < chunkPosts.length, j < advPostsList.length; i++, j++) {
+                    if (chunkPosts[i]) {
+                      chunkPosts[i].forEach(element => { finalPosts.push(helpers.getPostObject(element, null)) });
+                    }
+                    if (advPostsList[j]) { finalPosts.push(helpers.getPostObject(advPostsList[j], null)); }
+                  }
+                }
+                else if(postsList.length > 0 && advPostsList.length == 0) {
+                  for (let i = 0; i < postsList.length; i++) {
+                    finalPosts.push(helpers.getPostObject(postsList[i], null));
+                  }
+                }
+                else if(postsList.length == 0 && advPostsList.length > 0) {
+                  for (let i = 0; i < advPostsList.length; i++) {
+                    finalPosts.push(helpers.getPostObject(advPostsList[i], null));
+                  }
+                }
+                var pagination = {
+                  pageSize: postParams.pageSize,
+                  nextPage: postParams.page + 1,
+                  length: finalPosts.length
+                }
+                return res.json({ pagination: pagination, posts: finalPosts });
+          }
+        });
+      }
+    });
+  }
+
+});
+
+postRouter.post('/post/getContent',auth, (req, res) => {
+    var contentObj = {
+      pageSize: req.body.pageSize || 10,
+      page: req.body.page || 0,
+      Categories : req.body.Categories || '',
+      fromDate : req.body.fromDate || '',
+      toDate : req.body.toDate || ''
+    }
+    app.postController.getAllContentList(contentObj, async function (error, contentList) {
+      
+      if (error) {
+        res.status(400).json({ error: error });
+      }else{
+        let coupinoId = []
+        let postId = []
+        contentList.data.forEach(v=> {
+          if(v.contentType == 'Coupino'){
+            let id = mongoose.Types.ObjectId(v.contentId);
+            coupinoId.push(id)
+          }else if(v.contentType == 'Post'){
+            let id = mongoose.Types.ObjectId(v.contentId);
+            postId.push(id)
+          }
+        })
+        finalContent = [];
+        if(postId.length != 0 && coupinoId.length != 0 ){
+          let Obj = {
+            pageSize: 100,
+            page: 0,
+            postId : postId || [],
+          }
+          app.postController.getPostList( Obj, async function(error, postList) {
+            if (error || !postList) {
+             return res.status(400).json({ error: error });
+           } else {
+              for(let i=0; i<postList.posts.length; i++){
+                let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, "")
+                finalContent.push(x)
+              }
+              console.log("post length---------------",finalContent.length)
+              let listFilters = {
+                status:req.body.status || "All",
+                radius:  0,
+                pageSize: 100,
+                page: 0,
+                user_id: req.user.user_id,
+                viewBy: req.body.viewBy || '',
+                coupinoId : coupinoId || []
+              }
+              app.coupinosController.getContentCoupinoList(listFilters, function(error, coupinosData) {
+                if (error || !coupinosData) {
+                  return res.status(400).json({ error: error });
+                }
+                else {
+                  if(coupinosData.list && coupinosData.list.length > 0) {
+                    coupinosData.list.forEach(c => {
+                      finalContent.push(createCoupinoObject(c,req.user.user_id));
+                    });
+                }
+                console.log("postwoith coupino---------------",finalContent.length)
+                let Obj = {
+                  totalCount:contentList.totalCount,
+                  data:finalContent
+                }
+                res.status(200).json({ data: Obj });
+              }
+              });
+           }
+         });
+        }else if(coupinoId.length != 0 && postId.length == 0 ){
+          let listFilters = {
+            status:req.body.status || "All",
+            radius:  0,
+            pageSize: 100,
+            page: 0,
+            user_id: req.user.user_id,
+            viewBy: req.body.viewBy || '',
+            coupinoId : coupinoId || []
+          }
+          app.coupinosController.getContentCoupinoList(listFilters, function(error, coupinosData) {
+            if (error || !coupinosData) {
+              return res.status(400).json({ error: error });
+            }
+            else {
+              if(coupinosData.list && coupinosData.list.length > 0) {
+                coupinosData.list.forEach(c => {
+                  finalContent.push(createCoupinoObject(c,req.user.user_id));
+                });
+            }
+            console.log("only coupino---------------",finalContent.length)
+            let Obj = {
+              totalCount:contentList.totalCount,
+              data:finalContent
+            }
+            res.status(200).json({ data: Obj });
+          }
+          });
+        }else if(coupinoId.length == 0 && postId.length != 0){
+          let Obj = {
+            pageSize: 100,
+            page: 0,
+            postId : postId || [],
+          }
+          app.postController.getPostList( Obj, async function(error, postList) {
+            if (error || !postList) {
+             return res.status(400).json({ error: error });
+           } else {
+              for(let i=0; i<postList.posts.length; i++){
+                let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, "")
+                finalContent.push(x)
+              }
+              console.log("only post---------------",finalContent.length)
+              let Obj = {
+                totalCount:contentList.totalCount,
+                data:finalContent
+              }
+              res.status(200).json({ data: Obj });
+            }
+          })
+        }else{
+          let Obj = {
+            totalCount:0,
+            data:[],
+            message:'data not fount'
+          }
+          res.status(200).json({ data: Obj });
+        }
+      }
+    })
+})
+
+function createCoupinoObject(coupinoData,userId){
+  // console.log('----------------------',coupinoData)
+  let isLikedByMe = false,
+  isBookmarkedByMe = false,
+  isRedeemedByMe = false,
+  coupinoLikes = [],
+  coupinoBookmarks = [],
+  coupinoComments = [],
+  coupinoImage  = '',
+  shareDetails = {},
+  isCoupinoImages = '';
+
+coupinoData.coupinoLikes.forEach(x => {
+if (x.likedBy != undefined && x.likedBy.contactPerson != undefined) {
+  var item = {
+      _id: x.likedBy._id,
+      firstName: x.likedBy.contactPerson.firstName,
+      lastName: x.likedBy.contactPerson.lastName.charAt(0) + ".",
+      profilePicUrl: x.likedBy.contactPerson.profilePic ? '/user/profilePic/' + x.likedBy._id : "",
+      isDefaultImage: x.likedBy.contactPerson.isDefaultImage,
+      defaultImagePath: x.likedBy.contactPerson.defaultImagePath,
+      createdOn:x.createdAt
+  }
+  coupinoLikes.push(item);
+}
+});
+let likedByMe = coupinoData.coupinoLikes.find(x => x.likedBy._id == userId);
+if (likedByMe != undefined && likedByMe != null) {
+    isLikedByMe = true;
+}
+if(coupinoData.coupinoRedeemedBy != undefined && coupinoData.coupinoRedeemedBy.length != 0 ){
+let redeemedBy = coupinoData.coupinoRedeemedBy[0].reedemedBy.find(x => x.reedemedByUser == userId);
+if (redeemedBy != undefined && redeemedBy != null) {
+  isRedeemedByMe = true;
+}
+}
+coupinoData.coupinoComments.forEach(x => {
+  if (x.commentedBy != undefined && x.commentedBy.contactPerson != undefined) {
+      var item = {
+          comment:x.comment,
+          _id: x.commentedBy._id,
+          firstName: x.commentedBy.contactPerson.firstName,
+          lastName: x.commentedBy.contactPerson.lastName.charAt(0) + ".",
+          profilePicUrl: '/user/profilePic/' + x.commentedBy._id,
+          isDefaultImage: x.commentedBy.contactPerson.isDefaultImage,
+          defaultImagePath: x.commentedBy.contactPerson.defaultImagePath,
+          createdOn:x.createdAt
+      }
+      coupinoComments.push(item);
+  }
+});
+
+coupinoData.coupinoBookmarks.forEach(x => {
+  if (x.bookmarkedBy != undefined && x.bookmarkedBy.contactPerson != undefined) {
+      var item = {
+          _id: x.bookmarkedBy._id,
+          firstName: x.bookmarkedBy.contactPerson.firstName,
+          lastName: x.bookmarkedBy.contactPerson.lastName.charAt(0) + ".",
+          profilePicUrl: '/user/profilePic/' + x.bookmarkedBy._id,
+          isDefaultImage: x.bookmarkedBy.contactPerson.isDefaultImage,
+          defaultImagePath: x.bookmarkedBy.contactPerson.defaultImagePath
+      }
+      coupinoBookmarks.push(item);
+  }
+});
+let bookmarkedByMe = coupinoData.coupinoBookmarks.find(x => x.bookmarkedBy._id == userId);
+if (bookmarkedByMe != undefined && bookmarkedByMe != null) {
+isBookmarkedByMe = true;
+}
+if(coupinoData.imageUrl != null && coupinoData.imageUrl != '') {
+coupinoImage = '/coupinos/getMedia/' + coupinoData._id
+}
+
+if (coupinoData.isSharedPost && coupinoData.shareDetails != undefined && coupinoData.shareDetails.sharedBy.contactPerson != undefined) {
+  shareDetails = {
+      originalPostId: coupinoData.shareDetails.originalCoupinoId,
+      sharedOn: coupinoData.shareDetails.sharedOn,
+      sharedBy: {
+          firstName: coupinoData.shareDetails.sharedBy.contactPerson.firstName,
+          lastName: coupinoData.shareDetails.sharedBy.contactPerson.lastName.charAt(0) + ".",
+          profilePicUrl: '/user/profilePic/' + coupinoData.shareDetails.sharedBy._id,
+          isDefaultImage: coupinoData.shareDetails.sharedBy.contactPerson.isDefaultImage,
+          defaultImagePath: coupinoData.shareDetails.sharedBy.contactPerson.defaultImagePath
+      }
+  }
+}
+let coupinoImages = []
+if(coupinoData.images.length > 0){
+coupinoData.images.forEach(v=>{
+  coupinoImages.push({imageId:v._id,mediaType:v.mediaType,url:v.isDefaultImage == false ? '/coupinos/getMediaByImageId/' + coupinoData._id + '/' + v._id  : v.mediaUrl })
+})
+}
+const date2 = new Date(coupinoData.endDate);
+const diffTime = (date2 > new Date()) ? Math.abs(date2 - new Date()) : 0;
+const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+// console.log(coupinoData.coupinoViews)
+var _coupino = {
+_id:coupinoData._id,
+createdAt:coupinoData.createdOn,
+remainDays : diffDays,
+category: coupinoData.category,
+headline: coupinoData.heading,
+description: coupinoData.description,
+location: coupinoData.location,
+hashtags: coupinoData.hashtags,
+isLikedByMe: isLikedByMe,
+createdBy: coupinoData.creator,
+isBookmarkedByMe: isBookmarkedByMe,
+maxRedemptions: coupinoData.maxRedemptions,
+redemptionCount:  coupinoData.redemptionCount,
+value: coupinoData.value,
+startDate:coupinoData.startDate,
+endDate: coupinoData.endDate,
+status: coupinoData.status,
+title: coupinoData.infoText,
+type: coupinoData.type,
+isExpired: coupinoData.endDate < new Date(),
+coupinoBookmarks:coupinoBookmarks,
+coupinoLikes:coupinoLikes,
+shareDetails:shareDetails,
+images : coupinoImages,
+coupinoComments : coupinoComments,
+coupinoStatus : coupinoData.coupinoPaymentStatus,
+isActive : coupinoData.isActive,
+coupinoViews:coupinoData.coupinoViews,
+coupinoViewCount: (coupinoData.coupinoViews && coupinoData.coupinoViews.length != 0) ? (coupinoData.coupinoViews[0].viewBy ? coupinoData.coupinoViews[0].viewBy.length : 0 ) : 0,
+reportId:coupinoData.reportId,
+panalties:coupinoData.panalties,
+isRedeemedByMe:isRedeemedByMe,
+types: "Coupino"
+}
+return _coupino;
+}
+
+
+
+
+
+
+
+
+
+
+//Summary
+postRouter.post('/post/getSummary', auth, async (req, res) => {
+  let Obj = {
+    pageSize: req.body.pageSize || 10,
+    page: req.body.page || 0,
+    fromDate: new Date(req.body.fromDate) || "",
+    toDate:  new Date(req.body.toDate) || "",
+    Categories: req.body.Categories || ''
+  };
+
+
+  let newUsersCount;
+  let contentCount;
+  let postLikeCount;
+  let coupinoLikeCount;
+  let postCommentCount;
+  let coupinoCommentCount;
+  let CoupinoViewCount;
+  let postBookmarksCount;
+  let coupinoBookmarksCount;
+  let coupinoRedeemptionsCount;
+  let reportCount;
+  let postLike = [];
+  let coupinoLike =[];
+  let postComment=[];
+  let coupinoComment = [];
+  let postsBookmarks = [];
+  let CoupinosBookmarks = [];
+
+    
+    try {
+
+
+      //for User
+      const newUsers = await UserAccount.find({
+        status: "Active",
+        creationDate : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+      });     
+       newUsersCount = newUsers.length;
+      
+
+       //for Content
+       const newContent = await Content.find({
+        status: "Active",
+        createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+      });     
+      contentCount = newContent.length;
+
+      const newPostLikes = await Post.find({
+        status : "Active",
+        'postLikes': {
+          $elemMatch: {
+            'createdAt': {$gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate)}
+          }
+        }
+      })
+      .select('_id postImage postLikes postDescription postImages') // Assuming 'postId' and 'postImage' are the correct field names for your schema.
+      .populate({
+        path: 'postLikes.likedBy',
+        select: ('_id contactPerson ') // Or any other fields you want from the UserAccount schema.
+      });
+      postLikeCount = newPostLikes.length;     
+      postLike = newPostLikes;
+
+
+      //For coupino Like
+      const newCoupinoLikes= await Coupino.find({
+
+        'coupinoLikes': {
+          $elemMatch: {
+            'createdAt': {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+          }
+        }
+      }) .select('_id images coupinoLikes heading') // Assuming 'postId' and 'postImage' are the correct field names for your schema.
+      .populate({
+        path: 'coupinoLikes.likedBy',
+        select: ('_id contactPerson') // Or any other fields you want from the UserAccount schema.
+      });
+      coupinoLikeCount = newCoupinoLikes.length;
+      coupinoLike = newCoupinoLikes
+
+
+      //For Post Comment
+      const newPostComment = await PostComment.find({
+        status: "Active",
+        createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+      })
+      .populate('commentedBy','id contactPerson')
+      .populate('postId','id postImages postDescription');   
+      postCommentCount = newPostComment.length;
+      postComment = newPostComment;
+
+
+      //Coupino Comment
+      const newCoupinoComment = await CoupinoComment.find({
+        status: "Active",
+        createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+      })
+      .populate('commentedBy','id contactPerson')
+      .populate('postId','id postImages')
+
+      coupinoCommentCount = newCoupinoComment.length;     
+      coupinoComment = newCoupinoComment
+
+      //Coupino View
+      const newCoupinoView = await CoupinoView.find({
+        status: "Active",
+        createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+      });   
+      CoupinoViewCount = newCoupinoView.length;
+
+
+
+
+        //For Bookmarks Post
+        const newPostBookmarks= await Post.find({
+          'postBookmarks': {
+            $elemMatch: {
+              'createdAt': {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+            }
+          }
+        })
+        .select('_id postImages postBookmarks postDescription')
+        .populate({
+          path: 'postBookmarks.bookmarkedBy',
+          select: ('_id contactPerson')
+        });          
+        postBookmarksCount = newPostBookmarks.length;
+        postsBookmarks = newPostBookmarks;
+
+
+         //For Bookmarks coupino
+         const newCoupinoBookmarks= await Coupino.find({
+          'coupinoBookmarks': {
+            $elemMatch: {
+              'createdAt': {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+            }
+          }
+        })  
+        .select('_id coupinoBookmarks heading')
+        .populate({
+          path: 'coupinoBookmarks.bookmarkedBy',
+          select: ('_id contactPerson') // Or any other fields you want from the UserAccount schema.
+        }); 
+
+
+        coupinoBookmarksCount = newCoupinoBookmarks.length;
+        CoupinosBookmarks = newCoupinoBookmarks
+
+
+
+        //For coupinoredeemptions
+        const newCoupinoRedeemptions= await CoupinoRedeemption.find({
+          'reedemedBy': {
+            $elemMatch: {
+              'createdAt': {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+            }
+          }
+        })  
+        coupinoRedeemptionsCount = newCoupinoRedeemptions.length;
+
+
+
+        //For Report
+        const newReport = await Report.find({
+          status: "Active",
+          createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
+        });   
+        reportCount = newReport.length;
+
+
+    } catch (error) {
+      console.error('Error fetching active users:', error);
+      throw error; 
+    }         
+
+
+    // Summary
+    var summary = {
+      newUsersCount,
+       contentCount,
+       postLikeCount,
+       coupinoLikeCount,
+       postCommentCount,
+       coupinoCommentCount,
+       CoupinoViewCount,
+       postBookmarksCount,
+       coupinoBookmarksCount,
+       coupinoRedeemptionsCount,
+       reportCount,
+       postLike,
+       coupinoLike,
+       postComment,
+       coupinoComment,
+       CoupinosBookmarks,
+       postsBookmarks
+
+
+    };
+
+    return res.status(200).json({status: "true",message : "get summary successfully" , summary});
+  
+});
+
+
+
+module.exports = postRouter;

@@ -11,7 +11,8 @@ const userSchema = mongoose.Schema({
   email : {
     type : String,
     required : true
-  }
+  },
+  role: { type: String, default: "RegularUser", index: true },
 },{timestamps : true});
 
-module.exports.users=mongoose.model("Users",userSchema);
+module.exports.users=mongoose.model("User",userSchema);

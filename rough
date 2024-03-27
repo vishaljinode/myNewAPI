@@ -1,0 +1,80 @@
+postRouter.post("/post/like", auth, (req, res) => {
+  if (!req.body.postId) {
+    return res.status(400).json({ error: "invalid post id." });
+  }
+
+  app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
+    if (error) {
+      res.json({ error: error });
+    }
+    if (existedPost.exists == false) {
+      return res.status(400).json({ error: "invalid post id." });
+    }
+
+    else {
+      var userId = req.user.user_id;
+      var existingLikes = existedPost.postLikes;
+      let searchedPostLikes = existingLikes.find(x => x.likedBy == userId);
+      if (searchedPostLikes) {
+        app.postController.deletePostLike(existedPost._id, searchedPostLikes._id, function (error, deletedPostLike) {
+          if (error || !deletedPostLike) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            return getPostById(existedPost._id, req.user.user_id, "Post Like Deleted", res);
+          }
+        });
+      }
+      else {
+        app.postController.createPostLike(existedPost, userId, function (error, createdPostLike) {
+          if (error || !createdPostLike) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            return getPostById(existedPost._id, req.user.user_id, "Post Like Created", res);
+          }
+        });
+      }
+    }
+  });
+
+});
+
+postRouter.post("/post/bookmark", auth, (req, res) => {
+  if (!req.body.postId) {
+    return res.status(400).json({ error: "invalid post id." });
+  }
+  app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
+    if (error) {
+      res.json({ error: error });
+    }
+    if (existedPost.exists == false) {
+      return res.status(400).json({ error: "invalid post id." });
+    }
+    else {
+      var userId = req.user.user_id;
+      var existingBookmarks = existedPost.postBookmarks;
+      let searchedPostBookmarks = existingBookmarks.find(x => x.bookmarkedBy == userId);
+      if (searchedPostBookmarks) {
+        app.postController.deletePostBookmark(existedPost._id, searchedPostBookmarks._id, function (error, deletedPostBookmark) {
+          if (error || !deletedPostBookmark) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            return getPostById(existedPost._id, req.user.user_id, "Post Bookmark Deleted", res);
+          }
+        });
+      }
+      else {
+        app.postController.createPostBookmark(existedPost, userId, function (error, createdPostBookmark) {
+          if (error || !createdPostBookmark) {
+            return res.status(500).json({ error: error });
+          }
+          else {
+            return getPostById(existedPost._id, req.user.user_id, "Post Bookmark Created", res);
+                    }
+        });
+      }
+    }
+  });
+});

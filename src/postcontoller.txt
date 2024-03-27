@@ -1,0 +1,1700 @@
+var mongoose = require("mongoose"),
+    models = require("./models/postModels"),
+    userModels = require("./models/userModels"),
+    contentModels = require("./models/contentModels"),
+    configuration = require("./config/configuration"),
+    reportModel = require("./models/reportModels"),
+    debug = require("debug")("coupinos-server");
+
+var Post = models.Post,
+    PostImage = models.PostImage,
+    Report = reportModel.Report,
+    PostComment = models.PostComment,
+    Content = contentModels.Content,
+    UserSnoozedAccount = userModels.UserSnoozedAccount;
+var PostController = function () { };
+
+//#region post
+PostController.prototype.createPost = async function (postData, callback) {
+    if (!postData) {
+        debug("Failed to get postData");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        var post = new Post();
+        post.postTitle = postData.postTitle;
+        post.postDescription = postData.postDescription;
+        post.postedBy = postData.postedBy;
+        post.partnerId = postData.partnerId;
+        post.longitude = postData.longitude;
+        post.latitude = postData.latitude;
+        post.dataPrivacyRule = postData.dataPrivacyRule;
+        post.isAdvertorialPost = postData.isAdvertorialPost;
+        post.category = postData.category;
+        post.fontColor = postData.fontColor || '';
+        post.backgroundColor = postData.backgroundColor || '';
+        post.type = postData.type || '';
+        post.address = postData.address || '';
+        post.placeId = postData.placeId || '';
+        post.commentAllowed = postData.commentAllowed || true
+        post.zipCode = postData.zipCode;
+        if (postData.hashTags != undefined) {
+            post.hashtags = postData.hashTags;
+        }
+        post.loc = {
+            type: "Point",
+            coordinates: [postData.longitude, postData.latitude]
+        }
+        post.postLikes = [];
+        post.save((error, createdPost) => {
+            if (error) {
+                debug("Error in createPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!createdPost) {
+                debug("Error in createdPost: Failed to create a new post");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+
+                if (postData.postedImages !== undefined) {
+                    if (postData.postedImages.length > 0) {
+                        debug("posted Images", postData.postedImages);
+
+                        var postImages = [];
+                        var count = 1;
+                        for (var i = 0; i < postData.postedImages.length; i++) {
+
+                            var postImage = new PostImage();
+                            postImage.mediaUrl = postData.postedImages[i].mediaUrl;
+                            postImage.mediaType = postData.postedImages[i].mediaType;
+                            postImage.postId = createdPost._id;
+                            postImage.save((error, createdPostImage) => {
+                                if (error) {
+                                    debug("Error in createdPostImage: " + error);
+                                    callback(configuration.errorMessages.generic, null);
+                                }
+                                else if (!createdPostImage) {
+                                    debug("Error in createdPostImage: Failed to create a new post image");
+                                    callback(configuration.errorMessages.generic, null);
+                                }
+                                else {
+                                    createdPost.postImages.push(createdPostImage._id);
+                                    if(count == postData.postedImages.length) {
+                                        createdPost.save((error, createdPostWithImages) => {
+                                            if (error) {
+                                                debug("Error in updatePostImage: " + error);
+                                                callback(configuration.errorMessages.generic, null);
+                                            }
+                                            else if (!createdPostWithImages) {
+                                                debug("Error in updatePostImage: Failed to update a post Image");
+                                                callback(configuration.errorMessages.generic, null);
+                                            }
+                                        });
+                                        
+                                    }
+                                    count++;
+
+                                }
+                            });
+                        }
+
+                    }
+                }
+                // if (postData.hashTags !== undefined) {
+                //     var postHashTags = new PostHashTag();
+                //     postHashTags.hashTags = postData.hashTags;
+                //     postHashTags.postId = createdPost._id;
+                //     postHashTags.save((error, createdPostHasgTags) => {
+                //         debug("createdPostHasgTags", createdPostHasgTags);
+                //         if (error) {
+                //             debug("Error in createdPostHasgTags: " + error);
+                //             callback(configuration.errorMessages.generic, null);
+                //         }
+                //         else if (!createdPostHasgTags) {
+                //             debug("Error in createdPostHasgTags: Failed to create a new post hashtag");
+                //             callback(configuration.errorMessages.generic, null);
+                //         }
+                //         else {
+                //         }
+                //     })
+                // }
+                callback(null, createdPost);
+            }
+        })
+        post.isReported = false;
+        post.reportId = [];
+
+    }
+}
+
+PostController.prototype.addPostImages = function (postId,imageAry, callback) {
+    Post.findOne({ _id: postId, status: "Active",panalties:false}).exec(function (error, posts) {
+        if (error) {
+            debug("Error in updatePost: " + error);
+            callback(configuration.errorMessages.generic, null);
+
+        }else if (!posts) {
+            debug("Error in updatePost: Failed to create a update post");
+            callback(configuration.errorMessages.generic, null);
+        }else {
+            var count = 1;
+            for (var i = 0; i < imageAry.length; i++) {
+
+                var postImage = new PostImage();
+                postImage.mediaUrl = imageAry[i].mediaUrl;
+                postImage.mediaType = imageAry[i].mediaType;
+                postImage.postId = posts._id;
+                postImage.save((error, createdPostImage) => {
+                    if (error) {
+                        debug("Error in createdPostImage: " + error);
+                        callback(configuration.errorMessages.generic, null);
+                    }
+                    else if (!createdPostImage) {
+                        debug("Error in createdPostImage: Failed to create a new post image");
+                        callback(configuration.errorMessages.generic, null);
+                    }
+                    else {
+                        posts.postImages.push(createdPostImage._id);
+                        if(count == imageAry.length) {
+                            posts.save((error, createdPostWithImages) => {
+                                if (error) {
+                                    debug("Error in updatePostImage: " + error);
+                                    callback(configuration.errorMessages.generic, null);
+                                }
+                                else if (!createdPostWithImages) {
+                                    debug("Error in updatePostImage: Failed to update a post Image");
+                                    callback(configuration.errorMessages.generic, null);
+                                }
+                            });
+                            
+                        }
+                        count++;
+
+                    }
+                });
+            }
+            callback(null, posts);
+        }
+    });
+}
+
+PostController.prototype.updatePostComment = function (existingPostCommentData, callback) {
+    existingPostCommentData.save((error, updatedPostComment) => {
+        if (error) {
+            debug("Error in updatePost: " + error);
+            callback(configuration.errorMessages.generic, null);
+
+        }
+        else if (!updatedPostComment) {
+            debug("Error in updatePost: Failed to create a update post");
+            callback(configuration.errorMessages.generic, null);
+        }
+        else {
+            callback(null, updatedPostComment);
+        }
+    });
+}
+PostController.prototype.updatePost = function (existingPostData, callback) {
+    existingPostData.save((error, createdPostLike) => {
+        if (error) {
+            debug("Error in updatePost: " + error);
+            callback(configuration.errorMessages.generic, null);
+
+        }
+        else if (!createdPostLike) {
+            debug("Error in updatePost: Failed to create a update post");
+            callback(configuration.errorMessages.generic, null);
+        }
+        else {
+            callback(null, createdPostLike);
+        }
+    });
+}
+
+
+PostController.prototype.getPostById = function (postId, callback) {
+    debug(postId);
+    Post.findOne({ _id: postId, status: "Active",panalties:false})
+        .populate({
+            path: "postComments", // populate blogs
+            populate: {
+               path: "commentedBy" // in blogs, populate comments
+            }
+         })
+        .populate("postImages", "_id mediaType")
+        .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("postLikes.likedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("postBookmarks.bookmarkedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("shareDetails.sharedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .exec(function (error, posts) {
+            if (error) {
+                debug("Error in getPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!posts) {
+                debug("getPost returned no result");
+                callback(null, { exists: false });
+            }
+            else {
+                debug("getPost returned posts");
+                callback(null, posts);
+            }
+        });
+}
+
+//post 
+PostController.prototype.checkPostExistsById = function (postId, callback) {
+    Post.findOne({ _id: postId, $or: [{ status: "Active" }, { status: "PausedForReview" }]}, function (error, post) {
+        if (error) {
+            debug("Error in checkPostExistsById: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!post) {
+            debug("checkPostExistsById returned no result");
+            callback(null, { exists: false });
+        }
+        else {
+            debug("checkPostExistsById returned a post");
+            callback(null, post);
+        }
+    });
+}
+
+
+
+//Influencer Post
+PostController.prototype.checkInfluencerPostExistsById = function (postId, callback) {
+    Post.findOne({ _id: postId}, function (error, post) {
+        if (error) {
+            debug("Error in checkPostExistsById: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!post) {
+            debug("checkPostExistsById returned no result");
+            callback(null, { exists: false });
+        }
+        else {
+            debug("checkPostExistsById returned a post");
+            callback(null, post);
+        }
+    });
+}
+
+
+
+
+
+
+
+
+PostController.prototype.getPost = async function (postParamData, callback) {
+    // console.log(postParamData)
+    let conditions = {
+        status: "Active",
+        panalties:  false
+        // isAdvertorialPost: postParamData.fetchAdvertorialPost,
+    }
+    // {panalties: { $exists: true }},
+    if(postParamData.fetchAdvertorialPost && postParamData.fetchAdvertorialPost == true){
+        conditions.type = 'Advertorial'
+    }
+    if(postParamData.fetchAdvertorialPost == false){
+        conditions.type = { $in:  ["ImagePosting","TextPosting","VideoPosting"] }
+    }
+
+    if(postParamData.longitude && postParamData.latitude && postParamData.radius) {
+        conditions.loc =  {
+            $near: {
+                $geometry: { type: "Point", coordinates: [postParamData.longitude, postParamData.latitude] },
+                $maxDistance: postParamData.radius * 1000
+            }
+        }
+    }
+    if(postParamData.postType) {
+        conditions.type = postParamData.postType
+    }
+    if(postParamData.fromDate && postParamData.toDate) {
+        conditions.createdAt = {$gte: (postParamData.fromDate), $lt: (postParamData.toDate)}
+    }
+    if( postParamData.partnerInfluencerId && postParamData.partnerInfluencerId != ""){
+        let x = postParamData.partnerInfluencerId.map(v=> {return mongoose.Types.ObjectId(v)})
+        conditions.postedBy = { $in: x }
+    }
+    if(postParamData.partnerId && postParamData.partnerId != ''){
+        let id = mongoose.Types.ObjectId(postParamData.partnerId);
+        conditions.partnerId = id 
+    }
+    if(postParamData.postedBy) {
+        conditions.postedBy = postParamData.postedBy 
+    } else if (postParamData.user_id != undefined) {
+        let snoozeUser = [];
+        let snoozedUserList = await UserSnoozedAccount.find({ userId: postParamData.user_id }).select({ 'snoozedUser': 1, '_id': 0 })
+        let hiddenUserList = await UserSnoozedAccount.find({ userId: postParamData.user_id }).select({ 'snoozedUser': 1, '_id': 0 })
+        // console.log("list", snoozedUserList);
+        // console.log("list", hiddenUserList);
+        if(snoozedUserList.length > 0) {
+            snoozedUserList.forEach(x => { snoozeUser.push(x.snoozedUser);})
+        }
+        if(hiddenUserList.length > 0) {
+            hiddenUserList.forEach(x => { snoozeUser.push(x.hiddenUser);})
+        }
+        if(snoozeUser.length > 0) {
+            conditions.postedBy = { $nin: snoozeUser }
+        }
+    }
+    console.log("get post conditions ", conditions)
+
+    let query = Post.find(conditions);
+    let sort = {};
+    if (postParamData.sortBy == "Author") {
+        // sort - likes asc/desc - default - desc
+        sort = { 'postedBy' : -1 }
+    }
+    else if (postParamData.sortBy == "PostType") {
+        // sort - date asc/desc - default -desc
+        sort = { 'type':  -1 }
+    }
+    else if (postParamData.sortBy == "Heart") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'postLikes':  -1 }
+    }
+    else if (postParamData.sortBy == "Comments") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'postComments': -1 }
+    }
+    else if (postParamData.sortBy == "Report") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'reportId':  -1 }
+    }
+    else {
+        sort = { 'createdAt': -1 }
+    }
+    if(postParamData.viewBy === "mostPopular") {
+        sort = { 'postLikes': -1 };
+
+    }
+    // console.log(sort)
+    query = query.sort(sort)
+        // .populate("postComments")
+        .populate({
+            path: "postComments", // populate blogs
+            populate: {
+               path: "commentedBy" // in blogs, populate comments
+            }
+         })
+        .populate("postImages", "_id mediaType")
+        .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("postLikes.likedBy", "_id createdAt contactPerson.isDefaultImage contactPerson.defaultImagePath contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("postBookmarks.bookmarkedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("shareDetails.sharedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .skip(postParamData.page * postParamData.pageSize).limit(postParamData.pageSize);
+            
+        query.exec(function (error, posts) {
+
+
+        console.log("Post Ni Length",posts.length)
+
+
+        if (error) {
+            debug("Error in getPost: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!posts) {
+            debug("getPost returned no result");
+            callback(null, { exists: false });
+        }
+        else {
+            let _query = Post.find(conditions);
+            let sort = {};
+            if (postParamData.sortBy == "Author") {
+                sort = { 'postedBy' : -1 }
+            }
+            else if (postParamData.sortBy == "PostType") {
+                sort = { 'type':  -1 }
+            }
+            else if (postParamData.sortBy == "Heart") {
+                sort = { 'postLikes':  -1 }
+            }
+            else if (postParamData.sortBy == "Comments") {
+                sort = { 'postComments': -1 }
+            }
+            else if (postParamData.sortBy == "Report") {
+                sort = { 'reportId':  -1 }
+            }
+            else {
+                sort = { 'createdAt': -1 }
+            }
+            if(postParamData.viewBy === "mostPopular") {
+                sort = { 'postLikes': -1 };
+            }
+            _query = _query.sort(sort)
+            .populate({
+                path: "postComments", // populate blogs
+                populate: {
+                   path: "commentedBy" // in blogs, populate comments
+                }
+             })
+            .populate("postImages", "_id mediaType")
+            .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+            .populate("postLikes.likedBy", "_id createdAt contactPerson.isDefaultImage contactPerson.defaultImagePath contactPerson.firstName contactPerson.lastName contactPerson.profilePic");
+            _query.exec(function (error, postCount) {
+                console.log(postCount.length)
+            if (error) {
+                debug("Error in getPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!postCount) {
+                debug("getPost returned no result");
+                callback(null, { exists: false });
+            }else{
+                let obj = {
+                    posts:posts,
+                    postCount:postCount.length
+                }
+                callback(null, obj);
+            }
+        })
+        }
+    });
+    
+}
+
+
+
+//Get Post For UserSide
+PostController.prototype.getPostForUser = async function (postParamData, callback) {
+    // console.log(postParamData)
+    let conditions = {
+        status: "Active",
+        panalties:  false
+        // isAdvertorialPost: postParamData.fetchAdvertorialPost,
+    }
+    // {panalties: { $exists: true }},
+    if(postParamData.fetchAdvertorialPost && postParamData.fetchAdvertorialPost == true){
+        conditions.type = 'Advertorial'
+    }
+    if(postParamData.fetchAdvertorialPost == false){
+        conditions.type = { $in:  ["ImagePosting","TextPosting","VideoPosting"] }
+    }
+
+    if(postParamData.longitude && postParamData.latitude && postParamData.radius) {
+        conditions.loc =  {
+            $near: {
+                $geometry: { type: "Point", coordinates: [postParamData.longitude, postParamData.latitude] },
+                $maxDistance: postParamData.radius * 1000
+            }
+        }
+    }
+    if(postParamData.postType) {
+        conditions.type = postParamData.postType
+    }
+    if(postParamData.fromDate && postParamData.toDate) {
+        conditions.createdAt = {$gte: (postParamData.fromDate), $lt: (postParamData.toDate)}
+    }
+    if( postParamData.partnerInfluencerId && postParamData.partnerInfluencerId != ""){
+        let x = postParamData.partnerInfluencerId.map(v=> {return mongoose.Types.ObjectId(v)})
+        conditions.postedBy = { $in: x }
+    }
+    if(postParamData.partnerId && postParamData.partnerId != ''){
+        let id = mongoose.Types.ObjectId(postParamData.partnerId);
+        conditions.partnerId = id 
+    }
+    if(postParamData.postedBy) {
+        conditions.postedBy = postParamData.postedBy 
+    } else if (postParamData.user_id != undefined) {
+        let snoozeUser = [];
+        let snoozedUserList = await UserSnoozedAccount.find({ userId: postParamData.user_id }).select({ 'snoozedUser': 1, '_id': 0 })
+        let hiddenUserList = await UserSnoozedAccount.find({ userId: postParamData.user_id }).select({ 'snoozedUser': 1, '_id': 0 })
+        // console.log("list", snoozedUserList);
+        // console.log("list", hiddenUserList);
+        if(snoozedUserList.length > 0) {
+            snoozedUserList.forEach(x => { snoozeUser.push(x.snoozedUser);})
+        }
+        if(hiddenUserList.length > 0) {
+            hiddenUserList.forEach(x => { snoozeUser.push(x.hiddenUser);})
+        }
+        if(snoozeUser.length > 0) {
+            conditions.postedBy = { $nin: snoozeUser }
+        }
+    }
+    console.log("get post conditions ", conditions)
+
+    let query = Post.find(conditions);
+
+    
+    let sort = {};
+    if (postParamData.sortBy == "Author") {
+        // sort - likes asc/desc - default - desc
+        sort = { 'postedBy' : -1 }
+    }
+    else if (postParamData.sortBy == "PostType") {
+        // sort - date asc/desc - default -desc
+        sort = { 'type':  -1 }
+    }
+    else if (postParamData.sortBy == "Heart") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'postLikes':  -1 }
+    }
+    else if (postParamData.sortBy == "Comments") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'postComments': -1 }
+    }
+    else if (postParamData.sortBy == "Report") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'reportId':  -1 }
+    }
+    else {
+        sort = { 'createdAt': -1 }
+    }
+    if(postParamData.viewBy === "mostPopular") {
+        sort = { 'postLikes': -1 };
+
+    }
+    // console.log(sort)
+    query = query.sort(sort)
+        // .populate("postComments")
+        .populate({
+            path: "postComments", // populate blogs
+            populate: {
+               path: "commentedBy" // in blogs, populate comments
+            }
+         })
+        .populate("postImages", "_id mediaType")
+        .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("postLikes.likedBy", "_id createdAt contactPerson.isDefaultImage contactPerson.defaultImagePath contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("postBookmarks.bookmarkedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("shareDetails.sharedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        // .skip(postParamData.page * postParamData.pageSize).limit(postParamData.pageSize);
+            
+        query.exec(function (error, posts) {
+
+
+        console.log("Post Ni Length",posts.length)
+
+
+        if (error) {
+            debug("Error in getPost: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!posts) {
+            debug("getPost returned no result");
+            callback(null, { exists: false });
+        }
+        else {
+            let _query = Post.find(conditions);
+            let sort = {};
+            if (postParamData.sortBy == "Author") {
+                sort = { 'postedBy' : -1 }
+            }
+            else if (postParamData.sortBy == "PostType") {
+                sort = { 'type':  -1 }
+            }
+            else if (postParamData.sortBy == "Heart") {
+                sort = { 'postLikes':  -1 }
+            }
+            else if (postParamData.sortBy == "Comments") {
+                sort = { 'postComments': -1 }
+            }
+            else if (postParamData.sortBy == "Report") {
+                sort = { 'reportId':  -1 }
+            }
+            else {
+                sort = { 'createdAt': -1 }
+            }
+            if(postParamData.viewBy === "mostPopular") {
+                sort = { 'postLikes': -1 };
+            }
+            _query = _query.sort(sort)
+            .populate({
+                path: "postComments", // populate blogs
+                populate: {
+                   path: "commentedBy" // in blogs, populate comments
+                }
+             })
+            .populate("postImages", "_id mediaType")
+            .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+            .populate("postLikes.likedBy", "_id createdAt contactPerson.isDefaultImage contactPerson.defaultImagePath contactPerson.firstName contactPerson.lastName contactPerson.profilePic");
+            _query.exec(function (error, postCount) {
+                console.log(postCount.length)
+            if (error) {
+                debug("Error in getPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!postCount) {
+                debug("getPost returned no result");
+                callback(null, { exists: false });
+            }else{
+                let obj = {
+                    posts:posts,
+                    postCount:postCount.length
+                }
+                callback(null, obj);
+            }
+        })
+        }
+    });
+    
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PostController.prototype.getPublicPost = async function (postParamData, callback) {
+    let conditions = {
+        status: "Active",
+        panalties:  false
+    }
+    if(postParamData.fetchAdvertorialPost && postParamData.fetchAdvertorialPost == true){
+        conditions.type = 'Advertorial'
+    }
+    if(postParamData.longitude && postParamData.latitude && postParamData.radius) {
+        conditions.loc =  {
+            $near: {
+                $geometry: { type: "Point", coordinates: [postParamData.longitude, postParamData.latitude] },
+                $maxDistance: postParamData.radius * 1000
+            }
+        }
+    }
+    if(postParamData.postType) {
+        conditions.type = postParamData.postType
+    }
+    if(postParamData.fromDate && postParamData.toDate) {
+        conditions.createdAt = {$gte: (postParamData.fromDate), $lt: (postParamData.toDate)}
+    }
+
+    console.log("get post conditions ", conditions)
+    let query = Post.find(conditions);
+    let sort = {};
+    if (postParamData.sortBy == "Author") {
+        // sort - likes asc/desc - default - desc
+        sort = { 'postedBy' : -1 }
+    }
+    else if (postParamData.sortBy == "PostType") {
+        // sort - date asc/desc - default -desc
+        sort = { 'type':  -1 }
+    }
+    else if (postParamData.sortBy == "Heart") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'postLikes':  -1 }
+    }
+    else if (postParamData.sortBy == "Comments") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'postComments': -1 }
+    }
+    else if (postParamData.sortBy == "Report") {
+        // sort - comments asc/desc - default - desc
+        sort = { 'reportId':  -1 }
+    }
+    else {
+        sort = { 'createdAt': -1 }
+    }
+    if(postParamData.viewBy === "mostPopular") {
+        sort = { 'postLikes': -1 };
+
+    }
+    // console.log(sort)
+    query = query.sort(sort)
+        // .populate("postComments")
+        .populate({
+            path: "postComments", // populate blogs
+            populate: {
+               path: "commentedBy" // in blogs, populate comments
+            }
+         })
+        .populate("postImages", "_id mediaType")
+        .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("postLikes.likedBy", "_id createdAt contactPerson.isDefaultImage contactPerson.defaultImagePath contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("postBookmarks.bookmarkedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("shareDetails.sharedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .skip(postParamData.page * postParamData.pageSize).limit(postParamData.pageSize);
+    query.exec(function (error, posts) {
+        if (error) {
+            debug("Error in getPost: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!posts) {
+            debug("getPost returned no result");
+            callback(null, { exists: false });
+        }
+        else {
+            debug("getPost returned posts");
+            callback(null, posts);
+        }
+    });
+    
+}
+PostController.prototype.getPostList = function (postFilter, callback) {
+    if (!postFilter) {
+        debug("Failed to get postFilter");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        let match = {
+            status:"Active",
+           panalties:  false
+        }
+        let sort = {}
+        if(postFilter.postedBy != undefined && postFilter.postedBy != "" ){
+            let id = mongoose.Types.ObjectId(postFilter.postedBy);
+            match.postedBy = id
+        }
+        
+        if(postFilter.panalties){
+
+        }
+        if(postFilter.Categories == "all"){
+
+        }
+        if(postFilter.partnerId && postFilter.partnerId != ''){
+            let id = mongoose.Types.ObjectId(postFilter.partnerId);
+            match.partnerId = id 
+        }
+        if(postFilter.Categories && postFilter.Categories != "" && postFilter.Categories != "all"  ){
+            match.type = postFilter.Categories
+        }
+        if (postFilter.sortBy && postFilter.sortBy == "likes") {
+            // sort - likes asc/desc - default - desc
+            sort = { 'likes_count': postFilter.sortOrder == "asc" ? 1 : -1 }
+        }
+        else if (postFilter.sortBy && postFilter.sortBy == "date") {
+            // sort - date asc/desc - default -desc
+            sort = { 'createdAt': postFilter.sortOrder == "asc" ? 1 : -1 }
+        }
+        else if (postFilter.sortBy && postFilter.sortBy == "comments") {
+            // sort - comments asc/desc - default - desc
+            sort = { 'comments_count': postFilter.sortOrder == "asc" ? 1 : -1 }
+        }
+        else if (postFilter.sortBy && postFilter.sortBy == "bookmarked") {
+            // sort - comments asc/desc - default - desc
+            sort = { 'bookmarked_count': postFilter.sortOrder == "asc" ? 1 : -1 }
+        }
+        else {
+            sort = { 'createdAt': -1 }
+        }
+        if(postFilter.fromDate != undefined && postFilter.toDate != undefined && postFilter.fromDate != '' && postFilter.toDate != ''  ) {
+            match.createdAt = {$gte: (new Date(postFilter.fromDate)), $lt: (new Date(postFilter.toDate))}
+        }
+        if(postFilter.imagePostOnly) {
+            match.post_images_count = {$gt: 0}
+        }
+        if(postFilter.postId != undefined && postFilter.postId.length != 0){
+            match._id = { $in:  postFilter.postId }
+            match.status = { $in:  ['Active','PausedForReview'] }
+
+        }
+        console.log('post list',match)
+        Post.aggregate([
+            {$lookup: { from: "postimages", localField: "postImages", foreignField: "_id", as: "Images" }},
+            {$lookup: { from: "useraccounts", localField: "postedBy", foreignField: "_id", as: "postedByUser" }},
+            {$lookup: { from: "postcomments", localField: "postComments", foreignField: "_id", as: "Comment" }},
+            {$lookup: { from: "reports", localField: "reportId", foreignField: "_id", as: "reportedAry" }},
+            {$lookup: { from: "useraccounts", localField: "reportedAry.createdBy", foreignField: "_id", as: "reportCreateBy" }},
+            
+            {
+                $addFields: {
+                    likes_count: { $size: { "$ifNull": ["$postLikes", []] } },
+                    comments_count: { $size: { "$ifNull": ["$postComments", []] } },
+                    post_images_count: { $size: { "$ifNull": ["$postImages", []] } },
+                }
+            },
+            {
+                $match: match
+            },
+            {
+                $sort: sort
+            }
+        ])
+        // .skip(postFilter.page * postFilter.pageSize).limit(postFilter.pageSize) 
+        .exec(function (error, posts) {
+            if (error) {
+                debug("Error in getPostList: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!posts) {
+                debug("Error in getPostList: Failed to get list of post");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+               
+                Post.aggregate([
+                    {$lookup: { from: "postimages", localField: "postImages", foreignField: "_id", as: "Images" }},
+                    {$lookup: { from: "useraccounts", localField: "postedBy", foreignField: "_id", as: "postedByUser" }},
+                    {$lookup: { from: "postcomments", localField: "postComments", foreignField: "_id", as: "Comment" }},
+                    {$lookup: { from: "reports", localField: "reportId", foreignField: "_id", as: "reportedAry" }},
+                    {$lookup: { from: "useraccounts", localField: "reportedAry.createdBy", foreignField: "_id", as: "reportCreateBy" }},
+                    {
+                        $addFields: {
+                            likes_count: { $size: { "$ifNull": ["$postLikes", []] } },
+                            comments_count: { $size: { "$ifNull": ["$postComments", []] } },
+                            post_images_count: { $size: { "$ifNull": ["$postImages", []] } },
+                        }
+                    },
+                    {
+                        $match: match
+                    },
+                    {
+                        $sort: sort
+                    }
+                ]).exec(function (error, postsCount) {
+                    if (error) {
+                        debug("Error in getPostList: " + error);
+                        callback(configuration.errorMessages.generic, null);
+                    }
+                    else if (!postsCount) {
+                        debug("Error in getPostList: Failed to get list of post");
+                        callback(configuration.errorMessages.generic, null);
+                    }else{
+                        let obj = {
+                            postCount : postsCount.length,
+                            posts:posts
+                        }
+                        callback(null, obj);
+                    }
+                })
+
+
+            }
+        });
+    }
+}
+PostController.prototype.getRepoartedPostList = function (postFilter, callback) {
+    debug(postFilter);
+    if (!postFilter) {
+        debug("Failed to get postFilter");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        let sort = {}
+        let match = {
+            status:"Active",
+            isReported:true
+        }
+        
+        let statusAry = []
+        if(postFilter.status == 'all'){
+            statusAry = ['ToBeChecked','NoConsequnces','Panalties']
+        }else if(postFilter.status == 'ToBeChecked'){
+            statusAry = ['ToBeChecked']
+        }else if(postFilter.status == 'NoConsequnces'){
+            statusAry = ['NoConsequnces']
+        }else if(postFilter.status == 'Panalties'){
+            statusAry = ['Panalties']
+        }
+        if(postFilter.partnerId != ''){
+            let id = mongoose.Types.ObjectId(postFilter.partnerId);
+            match.partnerId = id 
+        }
+
+        if(postFilter.partnerInfluencerId != ""){
+            let ary = []
+           for(let i=0; i<postFilter.partnerInfluencerId.length;i++){
+               let id = mongoose.Types.ObjectId(postFilter.partnerInfluencerId[i]);
+               ary.push(id)
+           } 
+           match.postedBy = { $in:  ary }
+        }else if(postFilter.postedBy != ""){
+            let id = mongoose.Types.ObjectId(postFilter.postedBy);
+            match.postedBy = id
+        }
+        if(postFilter.Categories != ''  && postFilter.Categories != 'all'){
+            // console.log('-----------------------------------')
+            match.type = postFilter.Categories
+        }
+        if (postFilter.sortBy == "likes") {
+            // sort - likes asc/desc - default - desc
+            sort = { 'likes_count': postFilter.sortOrder == "asc" ? 1 : -1 }
+        }
+        else if (postFilter.sortBy == "date") {
+            // sort - date asc/desc - default -desc
+            sort = { 'createdAt': postFilter.sortOrder == "asc" ? 1 : -1 }
+        }
+        else if (postFilter.sortBy == "comments") {
+            // sort - comments asc/desc - default - desc
+            sort = { 'comments_count': postFilter.sortOrder == "asc" ? 1 : -1 }
+        }
+        else if (postFilter.sortBy == "bookmarked") {
+            // sort - comments asc/desc - default - desc
+            sort = { 'bookmarked_count': postFilter.sortOrder == "asc" ? 1 : -1 }
+        }
+        else {
+            sort = { 'createdAt': -1 }
+        }
+        if(postFilter.fromDate != '' && postFilter.toDate != '') {
+            match.createdAt = {$gte: (new Date(postFilter.fromDate)), $lt: (new Date(postFilter.toDate))}
+        }
+        if(postFilter.imagePostOnly) {
+            match.post_images_count = {$gt: 0}
+        }
+        if(postFilter.postIds && postFilter.postIds.length != 0) {
+            match._id = {$in: postFilter.postIds }
+            match.status = { $in:  ['Active','PausedForReview'] }
+        }else{
+            match.status = { $in:  ['Active','PausedForReview'] }
+        }
+        console.log( "repoarted post condition ", match,"statusArystatusAry",statusAry)
+        // console.log( "statusAry ", statusAry)
+        // console.log( "postFilter.status ", postFilter.status)
+        Post.aggregate([
+            {$lookup: { from: "postimages", localField: "postImages", foreignField: "_id", as: "Images" }},
+            {$lookup: { from: "useraccounts", localField: "postedBy", foreignField: "_id", as: "postedByUser" }},
+            {$lookup: { from: "postcomments", localField: "postComments", foreignField: "_id", as: "Comment" }},
+            {$lookup: { from: "reports", localField: "reportId", foreignField: "_id", as: "reportedAry" }},
+            { $match: { "reportedAry.status": { $in:  statusAry } } },
+            // { $in:  postParamData.partnerInfluencerId }
+
+            { $lookup: { from: "reportreasons", localField: "reportedAry.reasonId", foreignField: "_id", as: "reportreasons" } },
+            {$lookup: { from: "useraccounts", localField: "reportedAry.createdBy", foreignField: "_id", as: "reportCreateBy" }},
+            {
+                $addFields: {
+                    likes_count: { $size: { "$ifNull": ["$postLikes", []] } },
+                    comments_count: { $size: { "$ifNull": ["$postComments", []] } },
+                    post_images_count: { $size: { "$ifNull": ["$postImages", []] } },
+                }
+            },
+            {
+                $match: match
+            },
+            {
+                $sort: sort
+            }
+        ])
+        .skip(postFilter.page * postFilter.pageSize).limit(postFilter.pageSize) 
+        .exec(function (error, posts) {
+            // console.log("repoarted post list ", posts)
+            if (error) {
+                debug("Error in getPostList: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!posts) {
+                debug("Error in getPostList: Failed to get list of post");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                Post.aggregate([
+                    {$lookup: { from: "postimages", localField: "postImages", foreignField: "_id", as: "Images" }},
+                    {$lookup: { from: "useraccounts", localField: "postedBy", foreignField: "_id", as: "postedByUser" }},
+                    {$lookup: { from: "postcomments", localField: "postComments", foreignField: "_id", as: "Comment" }},
+                    {$lookup: { from: "reports", localField: "reportId", foreignField: "_id", as: "reportedAry" }},
+                    { $match: { "reportedAry.status": { $in:  statusAry } } },
+                    { $lookup: { from: "reportreasons", localField: "reportedAry.reasonId", foreignField: "_id", as: "reportreasons" } },
+                    {$lookup: { from: "useraccounts", localField: "reportedAry.createdBy", foreignField: "_id", as: "reportCreateBy" }},
+                    {
+                        $addFields: {
+                            likes_count: { $size: { "$ifNull": ["$postLikes", []] } },
+                            comments_count: { $size: { "$ifNull": ["$postComments", []] } },
+                            post_images_count: { $size: { "$ifNull": ["$postImages", []] } },
+                        }
+                    },
+                    {
+                        $match: match
+                    },
+                    {
+                        $sort: sort
+                    }
+                ]).exec(function (error, postsCount) {
+                    if (error) {
+                        debug("Error in getPostList: " + error);
+                        callback(configuration.errorMessages.generic, null);
+                    }
+                    else if (!postsCount) {
+                        debug("Error in getPostList: Failed to get list of post");
+                        callback(configuration.errorMessages.generic, null);
+                    }else{
+                        let obj = {
+                            postCount : postsCount.length,
+                            posts:posts
+                        }
+                        callback(null, obj);
+                    }
+                })
+
+
+            }
+        });
+    }
+}
+PostController.prototype.getPostByUser = function (postedBy, callback) {
+    debug(postedBy, " postedBy UserId");
+    let id = mongoose.Types.ObjectId(postedBy);
+    Post.aggregate([
+        {
+            $addFields: { likes_count: { $size: { "$ifNull": ["$postLikes", []] } } }
+        },
+        { $match: { postedBy: id } },
+        {
+            $sort: { "likes_count": -1 }
+        }
+    ]).exec(function (error, posts) {
+            if (error) {
+                debug("Error in getPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!posts) {
+                debug("getPost returned no result");
+                callback(null, { exists: false });
+            }
+            else {
+                debug("getPost returned posts");
+                callback(null, posts);
+            }
+        });
+}
+//#endregion Post
+
+//#region Post Media
+PostController.prototype.getPostImageById = function (postImageId, callback) {
+    debug(postImageId);
+    PostImage.findOne({ _id: postImageId }, function (error, postImage) {
+        if (error) {
+            debug("Error in getPostImageById: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!postImage) {
+            debug("getPostImageById returned no result");
+            callback(null, { exists: false });
+        }
+        else {
+            debug("getPostImageById returned postImage", postImage);
+            callback(null, postImage);
+        }
+    });
+}
+PostController.prototype.getMediaPost = async function (listFilter, callback) {
+    let conditions = {
+        $and: [
+            { status: "Active"},
+            {"postImages.0": {"$exists": true}},
+        ]
+    };
+    conditions.panalties = false
+
+    if(listFilter.longitude && listFilter.latitude && listFilter.radius) {
+        conditions.$and.push({ loc: {
+            $near: {
+                $geometry: { type: "Point", coordinates: [listFilter.longitude, listFilter.latitude] },
+                $maxDistance: listFilter.radius * 1000
+            }
+        }});
+    }
+    if(listFilter.fromDate && listFilter.fromDate != '' && listFilter.toDate && listFilter.toDate != '') {
+        let _dateFilter = {"createdAt": { $gte: new Date(listFilter.fromDate), $lt: new Date(listFilter.toDate) } }
+        conditions.$and.push(_dateFilter);
+    }
+    if(listFilter.userId) {
+        let id = mongoose.Types.ObjectId(listFilter.userId);
+        conditions.$and.push({ postedBy: listFilter.userId });
+    }
+    debug(conditions);
+    Post.find(conditions)
+        .populate("postImages", "_id mediaType")
+        .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("postLikes.likedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("postBookmarks.bookmarkedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("shareDetails.sharedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .skip(listFilter.page * listFilter.pageSize).limit(listFilter.pageSize)
+        .exec(function (error, posts) {
+            if (error) {
+                debug("Error in getMediaPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!posts) {
+                debug("getMediaPost returned no result");
+                callback(null, { exists: false });
+            }
+            else {
+                debug("getMediaPost returned posts", posts.length);
+                callback(null, posts);
+            }
+        });
+}
+PostController.prototype.updatePostImageByPostId = function (postId, callback) {
+    if (!postId) {
+        debug("Failed to get postId");
+        callback(configuration.errorMessages.generic);
+    } else {
+        PostImage.updateMany({ postId: postId }, { status: "Deleted" }, { multi: true }, function (error, updatedPostImages) {
+            if (error) {
+                debug("Error in updatePostImageById: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!updatedPostImages) {
+                debug("Error in updatePostImageById: Failed to update post images");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                callback(null, updatedPostImages);
+            }
+        });
+    }
+}
+//#endregion Post Media
+
+//#region Post Sharing
+PostController.prototype.createSharedPost = function (postData, callback) {
+    if (!postData) {
+        debug("Failed to get postData");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        var post = new Post();
+        post.postTitle = postData.postTitle;
+        post.postDescription = postData.postDescription;
+        post.postedBy = postData.postedBy;
+        post.longitude = postData.longitude;
+        post.latitude = postData.latitude;
+        post.dataPrivacyRule = postData.dataPrivacyRule;
+        post.isAdvertorialPost = postData.isAdvertorialPost;
+        post.category = postData.category;
+        post.postImages = postData.postImages;
+        post.postComments = postData.postComments;
+        post.postLikes = postData.postLikes;
+        post.postBookmarks = postData.postBookmarks;
+        post.postHashTags = postData.postHashTags;
+        post.hashtags = postData.hashtags;
+        post.address = postData.address;
+        post.isReported = postData.isReported;
+        post.reportId = postData.reportId;
+        post.panalties = postData.panalties;
+        post.zipCode = postData.zipCode;
+        post.type = postData.type;
+        if (postData.hashTags != undefined) {
+            post.hashtags = postData.hashTags;
+        }
+        post.loc = {
+            type: "Point",
+            coordinates: [postData.longitude, postData.latitude]
+        }
+        post.shareDetails.originalPostId = postData.shareDetails.originalPostId;
+        post.shareDetails.sharedBy = postData.shareDetails.sharedBy;
+        post.shareDetails.sharedOn = postData.shareDetails.sharedOn;
+        post.isSharedPost = postData.isSharedPost;
+
+        post.save((error, createdPost) => {
+            if (error) {
+                debug("Error in createSharedPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!createdPost) {
+                debug("Error in createdSharedPost: Failed to create a new post");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                callback(null, createdPost);
+            }
+        });
+    }
+}
+//#endregion Post Sharing
+
+//#region Post Comments
+PostController.prototype.createPostComment = function (postCommentData, callback) {
+    if (!postCommentData) {
+        debug("Failed to get postData");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        var postComment = new PostComment();
+        postComment.postId = postCommentData.postId;
+        postComment.comment = postCommentData.comment;
+        postComment.commentedBy = postCommentData.commentedBy;
+        postComment.save((error, createdPostComment) => {
+            if (error) {
+                debug("Error in createPostComment: " + error);
+                callback(configuration.errorMessages.generic, null);
+
+            }
+            else if (!createdPostComment) {
+                debug("Error in createdPostComment: Failed to create a new post comment");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                Post.findOneAndUpdate({ _id: postComment.postId }, { $push: { postComments: createdPostComment._id } }, { new: true },
+                    (error, updatedPost) => {
+                        if (error) { }
+                        else {
+                            callback(null, createdPostComment);
+                        }
+                    });
+            }
+        });
+    }
+
+}
+PostController.prototype.updatePostComment = function (postCommentData, callback) {
+    if (!postCommentData) {
+        debug("Failed to get postCommentData");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        postCommentData.save((error, updatedPostComment) => {
+            if (error) {
+                debug("Error in updatePostComment: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!updatedPostComment) {
+                debug("Error in updatePostComment: Failed to update post comment");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                if (updatedPostComment.status != "Active") {
+                    Post.findOneAndUpdate({ _id: postCommentData.postId }, {
+                        $pull: {
+                            postComments: updatedPostComment._id
+                        }
+                    },
+                        (error, updatedPost) => {
+                            if (error) {
+                                debug("Error in updatePostComment: " + error);
+                                callback(configuration.errorMessages.generic, null);
+                            }
+                            else {
+                                callback(null, updatedPostComment);
+                            }
+                        });
+                }
+                else {
+                    callback(null, updatedPostComment);
+                }
+            }
+        });
+    }
+}
+PostController.prototype.updatePostCommentByPostId = function (postId, callback) {
+    if (!postId) {
+        debug("Failed to get postId");
+        callback(configuration.errorMessages.generic);
+    } else {
+        PostComment.updateMany({ postId: postId }, { status: "Deleted" }, { multi: true }, function (error, updatedPostComments) {
+            if (error) {
+                debug("Error in updatePostCommentById: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!updatedPostComments) {
+                debug("Error in updatePostCommentById: Failed to update post comments");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                callback(null, updatedPostComments);
+            }
+        });
+    }
+}
+PostController.prototype.checkPostCommentExistsById = function (postCommentId, callback) {
+    PostComment.findOne({ _id: postCommentId, status: "Active" }, function (error, postComment) {
+        if (error) {
+            debug("Error in checkPostCommentExistsById: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!postComment) {
+            debug("checkPostCommentExistsById returned no result");
+            callback(null, { exists: false });
+        }
+        else {
+            debug("checkPostCommentExistsById returned a postComment");
+            callback(null, postComment);
+        }
+    });
+}
+PostController.prototype.getPostComment = function (postId, callback) {
+    PostComment.find({ postId: postId, status: "Active" })
+        .populate("commentedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("replyComment.commentedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .exec(function (error, postComments) {
+            if (error) {
+                debug("Error in getPostComment: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!postComments) {
+                debug("getPostComment returned no result");
+                callback(null, { exists: false });
+            }
+            else {
+                debug("getPostComment returned postComments");
+                callback(null, postComments);
+            }
+        });
+}
+PostController.prototype.createPostCommentReply = function (postComment, postCommentReplyData, callback) {
+    if (!postCommentReplyData) {
+        debug("Failed to get postData");
+        callback(configuration.errorMessages.generic);
+    }
+    if (!postComment) {
+        debug("Failed to get postData");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        postComment.replyComment.push({
+            comment: postCommentReplyData.comment,
+            commentedBy: postCommentReplyData.commentedBy
+        });
+        // var postRepliedComment = new PostRepliedComments();
+        // postRepliedComment.commentId = postCommentReplyData.commentId;
+        // postRepliedComment.comment = postCommentReplyData.comment;
+        // postRepliedComment.commentedBy = postCommentReplyData.commentedBy;
+        postComment.save((error, createdRepliedComment) => {
+            if (error) {
+                debug("Error in createPostRepliedComment: " + error);
+                callback(configuration.errorMessages.generic, null);
+
+            }
+            else if (!createdRepliedComment) {
+                debug("Error in commentId: Failed to create a new post comment");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                callback(null, createdRepliedComment);
+            }
+        });
+    }
+}
+PostController.prototype.getPostCommentReplies = function (commentId, callback) {
+    PostComment.find({ _id: commentId, status: "Active" })
+        .populate("replyComment.commentedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .exec(function (error, postComments) {
+            if (error) {
+                debug("Error in getPostComment: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!postComments) {
+                debug("getPostComment returned no result");
+                callback(null, { exists: false });
+            }
+            else {
+                debug("getPostComment returned postComments");
+                callback(null, postComments);
+            }
+        });
+}
+//#endregion Post Comments
+
+//#region Post Likes
+PostController.prototype.createPostLike = function (existingPostData, postLikeData, callback) {
+    if (!postLikeData) {
+        debug("Failed to get postLikeData");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        existingPostData.postLikes.push({ likedBy: postLikeData });
+
+        existingPostData.save((error, createdPostLike) => {
+            if (error) {
+                debug("Error in createPostLike: " + error);
+                callback(configuration.errorMessages.generic, null);
+
+            }
+            else if (!createdPostLike) {
+                debug("Error in createdPostLike: Failed to create a new post like");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                callback(null, createdPostLike);
+            }
+        });
+    }
+}
+
+PostController.prototype.deletePostLike = function (postId, postLikeId, callback) {
+    Post.updateOne({ _id: postId }, { $pull: { postLikes: { _id: postLikeId } } }, function (error, deletedPostLike) {
+        if (error) {
+            debug("Error in deletePostLike: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!deletedPostLike) {
+            debug("Error in deletePostLike: empty deletedPostLike");
+            callback(configuration.errorMessages.generic, null);
+        }
+        else {
+            callback(null, deletedPostLike);
+        }
+    });
+}
+
+PostController.prototype.getLikedPost = function(listFilter, callback) {
+    let _conditions = {
+        $and: [
+            { status: "Active"},
+            { panalties : false},
+            { $or: [
+                    { "postLikes.likedBy": listFilter.user_id },
+                    { postedBy: listFilter.user_id }
+                ]
+            },
+            { loc: {
+                $near: {
+                    $geometry: { type: "Point", coordinates: [listFilter.longitude, listFilter.latitude] },
+                    $maxDistance: listFilter.radius * 1000
+                }
+            }},
+            {"postImages.0": {"$exists": true}},
+            { isAdvertorialPost: listFilter.fetchAdvertorialPost},
+        ]
+    };
+    if(listFilter.fromDate && listFilter.toDate) {
+        let _dateFilter = {"createdAt": { $gte: listFilter.fromDate, $lt: listFilter.toDate } }
+        _conditions.$and.push(_dateFilter);
+    }
+    debug(JSON.stringify(_conditions));
+    Post.find(_conditions)
+        .populate("postImages", "_id mediaType")
+        .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("postLikes.likedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("postBookmarks.bookmarkedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("shareDetails.sharedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .skip(listFilter.page * listFilter.pageSize).limit(listFilter.pageSize)
+        .exec(function (error, posts) {
+            if (error) {
+                debug("Error in getLikedPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!posts) {
+                debug("getLikedPost returned no result");
+                callback(null, { exists: false });
+            }
+            else {
+                debug("getLikedPost returned posts", posts.length);
+                callback(null, posts);
+            }
+        });
+
+}
+//#endregion Post Likes
+
+//#region Post Bookmark
+PostController.prototype.createPostBookmark = function (existingPostData, postBookmarkData, callback) {
+    if (!postBookmarkData) {
+        debug("Failed to get postBookmarkData");
+        callback(configuration.errorMessages.generic);
+    }
+    else {
+        existingPostData.postBookmarks.push({ bookmarkedBy: postBookmarkData });
+        existingPostData.save((error, createdPostBookmark) => {
+            if (error) {
+                debug("Error in createPostBookmark: " + error);
+                callback(configuration.errorMessages.generic, null);
+
+            }
+            else if (!createdPostBookmark) {
+                debug("Error in createPostBookmark: Failed to create a new post bookmark");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                callback(null, createdPostBookmark);
+            }
+        });
+    }
+}
+
+PostController.prototype.deletePostBookmark = function (postId, postBookmarkId, callback) {
+    Post.updateOne({ _id: postId }, { $pull: { postBookmarks: { _id: postBookmarkId } } }, function (error, deletedPostBookmark) {
+        if (error) {
+            debug("Error in deletePostBookmark: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }
+        else if (!deletedPostBookmark) {
+            debug("Error in deletePostBookmark: empty deletedPostBookmark");
+            callback(configuration.errorMessages.generic, null);
+        }
+        else {
+            callback(null, deletedPostBookmark);
+        }
+    });
+}
+
+PostController.prototype.getPostImageByPostId = function (postId, callback) {
+    PostImage.findOne({ postId: postId }, function (error, postImage) {
+        if (error) {
+            debug("Error in getPostImageById: " + error);
+            callback(error, null);
+        }
+        // else if (!postImage) {
+        //     debug("Error in getPostImageById: empty postImage");
+        //     callback(configuration.errorMessages.generic, null);
+        // }
+        else {
+            callback(null, postImage);
+        }
+    });
+}
+
+PostController.prototype.unBlockRepoartedPosts = function () {
+    // console.log("block posts unBlock cron start", new Date())
+    let match = {}
+    match.unBlockDate = { $lte: (new Date)}
+
+    Report.find(match).exec(function(error,blockPostReports){
+        if(error){
+        }else{
+            Report.update({unBlockDate: {$lte: (new Date)} } , {$set: {status:"ToBeChecked",duration:"",unBlockDate:null} } , {multi: true, upsert: false},function(error,updatetedReport){
+                if(error){
+                    // console.log("error occer when update block post reports",error)
+                }else{
+                    for(let i=0; i<blockPostReports.length; i++){
+                        Post.update({_id : mongoose.Types.ObjectId(blockPostReports[i].contentId) } , {$set: {panalties:false} } , {multi: true, upsert: false},function(error,updatedPost){
+                            if(error){
+                                // console.log("error occer when update block post reports",error)
+                            }else{
+                                // console.log('blockPostReports and panalties post update successfully')
+                            }
+                        })     
+                    }
+                }
+            })
+        }
+    })
+
+}
+
+PostController.prototype.createContent = function (contentData, callback){
+    if(!contentData){
+        callback("contentData not getting");
+    }
+    var content = new Content()
+    content.contentId = contentData.contentId
+    content.contentType = contentData.contentType
+    content.contentSubType = contentData.contentSubType
+    content.save((error,newContent)=>{
+        if (error) {
+            debug("Error in create content: " + error);
+            callback(configuration.errorMessages.generic, null);
+        }else if (!newContent) {
+            debug("Error in content: Failed to create a new content");
+            callback(configuration.errorMessages.generic, null);
+        }else{
+            callback(null, newContent);
+        }
+    })
+}
+PostController.prototype.deleteContentByContentId = function (contentId, callback) {
+    if (!contentId) {
+        debug("Failed to get contentId");
+        callback(configuration.errorMessages.generic);
+    } else {
+        Content.update({ contentId: contentId }, { status: "Deleted" }, function (error, updatedContent) {
+            if (error) {
+                debug("Error in updateContentBycontentId: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!updatedContent) {
+                debug("Error in updateContentBycontentId: Failed to update content status");
+                callback(configuration.errorMessages.generic, null);
+            }
+            else {
+                callback(null, updatedContent);
+            }
+        });
+    }
+}
+
+PostController.prototype.getAllContentList = function (contentObj, callback) {
+    if (!contentObj) {
+        debug("Failed to get contentObj");
+        callback(configuration.errorMessages.generic);
+    } else {
+        let condition = {}
+        condition.status = 'Active';
+        if(contentObj.Categories == 'Coupino'){
+            condition.contentType = contentObj.Categories
+        }else if(contentObj.Categories != '' && contentObj.Categories != 'all' ){
+            condition.contentSubType = contentObj.Categories
+        }
+
+        if (contentObj.fromDate != "" && contentObj.toDate != "") {
+            condition.createdAt = { $gte: (new Date(contentObj.fromDate)), $lt: (new Date(contentObj.toDate)) }
+        }
+        console.log('----------condition fot all getAllContent',condition)
+        Content.find(condition)
+        .skip(contentObj.page * contentObj.pageSize).limit(contentObj.pageSize)
+        .exec(function (error, existingContent) {
+            if (error) {
+                debug("Error in updateContentBycontentId: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }else {
+                Content.find(condition).exec(function (error, existingContentCount) {
+                    if (error) {
+                        debug("Error in updateContentBycontentId: " + error);
+                        callback(configuration.errorMessages.generic, null);
+                    }else {
+                        let Obj = {
+                            totalCount:existingContentCount ? existingContentCount.length : 0,
+                            data:existingContent
+                        }
+                        callback(null, Obj);
+                    }
+                })
+            }
+        });
+    }
+}
+
+PostController.prototype.getBookmarkedPost = function (bookmarkFilter, callback) {
+    let conditions = {
+        $and: [
+            { status: "Active"}
+        ]
+    };
+    conditions.panalties = false
+
+    if(bookmarkFilter.longitude && bookmarkFilter.latitude && bookmarkFilter.radius) {
+        conditions.$and.push({ loc: {
+            $near: {
+                $geometry: { type: "Point", coordinates: [bookmarkFilter.longitude, bookmarkFilter.latitude] },
+                $maxDistance: bookmarkFilter.radius * 1000
+            }
+        }});
+    }
+    if(bookmarkFilter.bookmarkedBy) {
+        conditions.$and.push({ "postBookmarks.bookmarkedBy": bookmarkFilter.bookmarkedBy });
+    }
+    if(bookmarkFilter.mediaOnly) {
+        conditions.$and.push({"postImages.0": {"$exists": true}});
+    }
+    debug(conditions);
+    
+    let sort = {};
+    if(bookmarkFilter.viewBy === "mostPopular") {
+        sort = { 'postLikes': -1 };
+
+    } else {
+        sort = { 'createdAt': -1 };
+    }
+    Post.find(conditions)
+    //Post.find({ "postBookmarks.bookmarkedBy": bookmarkFilter.bookmarkedBy, status: "Active", isAdvertorialPost: bookmarkFilter.isAdvertorialPost })
+        .populate("postImages", "_id mediaType")
+        .populate("postedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic contactPerson.isDefaultImage contactPerson.defaultImagePath")
+        .populate("postLikes.likedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("postBookmarks.bookmarkedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .populate("shareDetails.sharedBy", "_id contactPerson.firstName contactPerson.lastName contactPerson.profilePic")
+        .skip(bookmarkFilter.page * bookmarkFilter.pageSize).limit(bookmarkFilter.pageSize)
+        .sort(sort)
+        .exec(function (error, posts) {
+            if (error) {
+                debug("Error in getPost: " + error);
+                callback(configuration.errorMessages.generic, null);
+            }
+            else if (!posts) {
+                debug("getPost returned no result");
+                callback(null, { exists: false });
+            }
+            else {
+                debug("getPost returned posts");
+                callback(null, posts);
+            }
+        });
+}
+//#endregion Post Bookmark
+
+module.exports = PostController;
