@@ -2,7 +2,7 @@ const userModels = require("../models/userModels");
 const User = userModels.users;
 // const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const SECTRET_KEY =process.env.SECTRET_KEY;
+const SECTRET_KEY="myprojectapiforyou";
 
 
 //SingUp

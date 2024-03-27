@@ -1,5 +1,5 @@
 const jwt=require('jsonwebtoken');
-const SECTRET_KEY =process.env.SECTRET_KEY;
+const SECTRET_KEY ="myprojectapiforyou";
 const mongoose=require('mongoose')
 
 const auth=(req,res,next)=>{
