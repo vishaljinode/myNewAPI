@@ -1,6 +1,6 @@
 const userModels = require("../models/userModels");
 const User = userModels.users;
-const bcrypt = require('bcrypt');
+// const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const SECTRET_KEY =process.env.SECTRET_KEY;
 
@@ -16,12 +16,12 @@ const signUp = async (req, res) => {
      }
 
     //Generate hashed password
-    const hashedpassword = await bcrypt.hash(password, 10);
+    // const hashedpassword = await bcrypt.hash(password, 10);
 
     //Create new User
     const newUser = await User.create({
       username: username,
-      password: hashedpassword,
+      password: password,
       email: email
     })
 
@@ -50,8 +50,8 @@ const signIn = async(req,res)=>{
     }
 
     //password match
-    const matchPassword=await bcrypt.compare(password,existingUser.password);
-    if(!matchPassword){
+    // const matchPassword=await bcrypt.compare(password,existingUser.password);
+    if(password!=existingUser.password){
       return res.status(400).json({message:"email or password not match"})
     }
 
