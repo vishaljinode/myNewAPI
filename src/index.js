@@ -21,7 +21,8 @@ app.use('/users',userRouter);
 app.use('/posts',noteRouter);
 
 app.get('/',(req,res)=>{
-res.send("Hello Worlds")})
+res.send("Hello Worlds")}
+);
 
 if (!process.env.MONGO_URL) {
   console.error('MONGO_URL is not defined in .env file');
