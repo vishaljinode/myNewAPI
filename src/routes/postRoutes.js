@@ -3,11 +3,102 @@ const noteRouter=express.Router();
 const {createPost,getPosts,getPostById,updatePost,deletePost}=require('../controllers/postController');
 const auth=require('../middleware/auth')
 
+const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
+        
+cloudinary.config({ 
+  cloud_name: 'dhyq1xwix', 
+  api_key: '191923522744623', 
+  api_secret: 'FIEq8HyYSMDbm2S3-YDLEotJ8AU' 
+});
+
+const DatabaseController = require("../controllers/databseController");
+var databaseController = new DatabaseController();
+
+const postController =require('../controllers/postController');
+
+
+
 noteRouter.post('/createPost',auth,createPost);
 noteRouter.get('/getPosts',auth,getPosts);
 noteRouter.get('/getPostById/:id',auth,getPostById);
 noteRouter.put('/updatePost/:id',auth,updatePost);
-noteRouter.delete('/deletePost/:id',auth,deletePost);
+noteRouter.get('/deletePost/:id',auth,deletePost);
+
+
+
+noteRouter.post('/add/',(req, res) => { 
+    const userId=req.userId;
+
+    const storage = multer.memoryStorage();
+    let uploadMedia = multer({storage: storage }).array('files');
+
+    databaseController.checkUserExistsById(userId, function (error, existedUser) {
+        if (error) {
+            return res.status(500).json({ error: error });
+        }
+        if (!existedUser.exists) {
+            return res.status(400).json({ error: "Invalid user id." });
+        }
+
+        // Handle media upload
+        uploadMedia(req, res, async function (err) {
+            if (req.fileValidationError) {
+                return res.status(400).send(req.fileValidationError);
+            }
+            else if (!req.files || req.files.length === 0) {
+                return res.status(400).send('Please select a file to upload');
+            }
+            else if (err instanceof multer.MulterError) {
+                return res.status(500).send(err);
+            }
+            else if (err) {
+                return res.status(500).send(err);
+            }
+
+            const files = req.files;
+            const postedImages = [];
+
+            for (const file of files) {
+                const result = await cloudinary.uploader.upload(file.buffer);
+    
+                postedImages.push({
+                    mediaUrl: result.secure_url,
+                    mediaType: result.format
+                });
+            }
+            // Prepare post data
+            const postJson = { 
+                postId: req.body.postId,               
+                postedImages, 
+                postTitle: req.body.postTitle,
+                postDescription: req.body.postDescription, 
+                postedBy: userId, 
+                postDist : req.body.postDist
+            };
+            postController.createPost1(postJson,function(error,createdPost){
+                if(error){
+                    return res.status(500).json({error:error})
+                }
+
+                if(!createPost){
+                    return res.status(500).json({error:error})
+                }
+
+                return res.status(200).json({status: true,message:"Post Created Successfully"})
+            })
+           
+          
+             
+            });
+        });
+    });
+
+noteRouter.get('/add', (req, res) => { 
+        res.send("Hello this is add")
+        });
+
+
 
 
 module.exports=noteRouter;

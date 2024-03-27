@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post Form</title>
+</head>
+<body>
+    <h1>Create a Post</h1>
+    <form action="http://localhost:5000/posts/add" method="POST" enctype="multipart/form-data">
+        <label for="postId">Post ID:</label><br>
+        <input type="text" id="postId" name="postId"><br><br>
+
+        <label for="postTitle">Post Title:</label><br>
+        <input type="text" id="postTitle" name="postTitle"><br><br>
+
+        <label for="postDescription">Post Description:</label><br>
+        <textarea id="postDescription" name="postDescription"></textarea><br><br>
+
+        <label for="postedBy">Posted By:</label><br>
+        <input type="text" id="postedBy" name="postedBy"><br><br>
+
+        <label for="postDist">Post Distance:</label><br>
+        <input type="text" id="postDist" name="postDist"><br><br>
+
+        <label for="postedImages">Posted Images:</label><br>
+        <input type="file" id="postedImages" name="postedImages" multiple><br><br>
+
+        <input type="submit" value="Submit">
+    </form>
+</body>
+</html>

@@ -35,6 +35,7 @@ var postImageSchema = mongoose.Schema({
 //post comment schema
 var postCommentSchema = mongoose.Schema({
   postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post", index: true },
+  postDist : { type: mongoose.Schema.Types.String },
   comment: { type: mongoose.Schema.Types.String },
   commentedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
   createdAt: { type: Date, default: Date.now },
@@ -60,7 +61,7 @@ var postCommentSchema = mongoose.Schema({
 
 
 module.exports.postsmodel=mongoose.model("Post",postSchema);
-exports.PostImage = mongoose.model("PostImage", postImageSchema);
-exports.PostComment = mongoose.model("PostComment", postCommentSchema);
+module.exports.PostImage = mongoose.model("PostImage", postImageSchema);
+module.exports.PostComment = mongoose.model("PostComment", postCommentSchema);
 
 

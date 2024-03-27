@@ -22,6 +22,7 @@ PostController.prototype.createPost = async function (postData, callback) {
     }
     else {
         var post = new Post();
+        
         post.postTitle = postData.postTitle;
         post.postDescription = postData.postDescription;
         post.postedBy = postData.postedBy;
