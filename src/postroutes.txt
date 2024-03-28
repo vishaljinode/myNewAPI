@@ -8,10 +8,11 @@ var express = require("express"),
   path = require("path"),
   models = require("../models/postModels"),
   userModels = require("../models/userModels"),
-  contentModels=require("../models/contentModels"),
-  coupinoModels=require("../models/coupinoModels"),
-  reportModels = require("../models/reportModels")
-  multer = require("multer"),
+  contentModels = require("../models/contentModels"),
+  coupinoModels = require("../models/coupinoModels"),
+  reportModels = require("../models/reportModels"),
+  partnerModels= require("../models/partnerModels"),
+multer = require("multer"),
   fs = require('fs'),
   crypto = require("crypto"),
   helpers = require('../utilities/helper-functions'),
@@ -31,12 +32,16 @@ var CoupinoView = coupinoModels.CoupinoView;
 var CoupinoRedeemption = coupinoModels.CoupinoRedeemption;
 var Report = reportModels.Report;
 
+var PartnerAccount=partnerModels.PartnerAccount;
+var PartnerComment=partnerModels.PartnerComment;
+
+
 
 
 //priavte methods
 function getPostById(postId, userId, message, res, createPost = "") {
-  app.postController.getPostById(postId, function(error, postDetails) {
-    console.log('postDetailspostDetailspostDetails',postDetails)
+  app.postController.getPostById(postId, function (error, postDetails) {
+    console.log('postDetailspostDetailspostDetails', postDetails)
     if (error) {
       return res.status(400).json({ error: error });
     }
@@ -44,20 +49,20 @@ function getPostById(postId, userId, message, res, createPost = "") {
       return res.status(400).json({ error: "invalid post id" });
     }
     else {
-      if(createPost == "true"){
-        app.postController.getPostImageByPostId(postId, function(error, postImage) {
-          if(error){
+      if (createPost == "true") {
+        app.postController.getPostImageByPostId(postId, function (error, postImage) {
+          if (error) {
             return res.status(500).json({ error: error });
-          }else{
+          } else {
             postDetails.postImages = []
-            if(postImage){
+            if (postImage) {
               postDetails.postImages.push(postImage)
             }
-            
+
             return res.status(200).json({ status: "true", message: message, data: helpers.getPostObject(postDetails, userId) });
           }
         })
-      }else{
+      } else {
         return res.status(200).json({ status: "true", message: message, data: helpers.getPostObject(postDetails, userId) });
       }
 
@@ -68,7 +73,7 @@ function getPostById(postId, userId, message, res, createPost = "") {
 
 //Posts
 postRouter.post('/post/add/', auth, (req, res) => {
- 
+
   var userId = req.user.user_id;
   let uploadMedia = multer({ storage: helpers.mediaStorage, fileFilter: validator.postMediaFilter }).array('files');
   // console.log(req.files)
@@ -82,20 +87,20 @@ postRouter.post('/post/add/', auth, (req, res) => {
     else {
       uploadMedia(req, res, function (err) {
         // console.log(req.files)
-        if(req.body.type != "TextPosting" && req.body.type != "Advertorial" && req.body.type != "ImagePosting" && req.body.type != "VideoPosting" 
-        ){
+        if (req.body.type != "TextPosting" && req.body.type != "Advertorial" && req.body.type != "ImagePosting" && req.body.type != "VideoPosting"
+        ) {
           return res.status(400).json({ error: "type should be TextPosting or Advertorial or ImagePosting or VideoPosting happen" });
         }
-        if(req.body.type == "TextPosting" && !req.body.postDescription){
+        if (req.body.type == "TextPosting" && !req.body.postDescription) {
           return res.status(400).json({ error: "in TextPosting post type, postDescription is mandatory" });
         }
-        if(req.body.type == "Advertorial" && !req.body.postDescription){
+        if (req.body.type == "Advertorial" && !req.body.postDescription) {
           return res.status(400).json({ error: "in Advertorial post type, postDescription is mandatory" });
         }
-        if(req.body.type == "ImagePosting" && req.files.length == 0){
+        if (req.body.type == "ImagePosting" && req.files.length == 0) {
           return res.status(400).json({ error: "in ImagePosting post type, Image is mandatory" });
         }
-        if(req.body.type == "VideoPosting" && req.files.length == 0){
+        if (req.body.type == "VideoPosting" && req.files.length == 0) {
           return res.status(400).json({ error: "in VideoPosting post type, Video is mandatory" });
         }
         // req.file contains information of uploaded file
@@ -120,11 +125,11 @@ postRouter.post('/post/add/', auth, (req, res) => {
         var postJson = { postId: req.body.postId, }
         // Loop through all the uploaded images and display them on frontend
         //for (index = 0, len = files.length; index < len; ++index) {
-        for(index = 0; index < files.length; index++) {
-          if((req.body.type == "ImagePosting") && (files[index].mimetype !== "image/png" && files[index].mimetype !== "image/jpeg") ){
+        for (index = 0; index < files.length; index++) {
+          if ((req.body.type == "ImagePosting") && (files[index].mimetype !== "image/png" && files[index].mimetype !== "image/jpeg")) {
             return res.status(400).json({ error: "in ImagePosting type, can't upload video" });
           }
-          if((req.body.type == "VideoPosting") &&  (files[index].mimetype == "image/png" || files[index].mimetype == "image/jpeg" || files[index].mimetype == "image/jpg") ){
+          if ((req.body.type == "VideoPosting") && (files[index].mimetype == "image/png" || files[index].mimetype == "image/jpeg" || files[index].mimetype == "image/jpg")) {
             return res.status(400).json({ error: "in ImagePosting type, can't upload image" });
           }
           postedImage.mediaUrl = path.join(__dirname, files[index].path);
@@ -133,63 +138,63 @@ postRouter.post('/post/add/', auth, (req, res) => {
           result += path.join(__dirname, files[index].path);
         }
         // console.log(postedImages);
-        let coordinates = req.body.latitude +  ","+  req.body.longitude
-        geocoder.reverseGeocode(coordinates, function(error, data) {
+        let coordinates = req.body.latitude + "," + req.body.longitude
+        geocoder.reverseGeocode(coordinates, function (error, data) {
           // console.log(error);
           // console.log(data.results[0].formatted_address);
           // console.log(data.results[0].place_id);
           let postalCode
-          for(let i=0; i<data.results.length; i++){
-            for(let j=0; j<data.results[i].address_components.length; j++){
-              if(data.results[i].address_components[j].types.includes('postal_code')){
+          for (let i = 0; i < data.results.length; i++) {
+            for (let j = 0; j < data.results[i].address_components.length; j++) {
+              if (data.results[i].address_components[j].types.includes('postal_code')) {
                 postalCode = data.results[i].address_components[j].long_name;
                 break;
-              } 
+              }
             }
           }
           // console.log(postalCode)
-          var postJson = { 
-            postId: req.body.postId, 
-            partnerId: req.body.partnerId, 
-            postedImages, 
-            hashTags: req.body.hashTags, 
+          var postJson = {
+            postId: req.body.postId,
+            partnerId: req.body.partnerId,
+            postedImages,
+            hashTags: req.body.hashTags,
             postTitle: req.body.postTitle,
-            postDescription: req.body.postDescription, 
-            postedBy: userId, 
-            latitude: req.body.latitude, 
+            postDescription: req.body.postDescription,
+            postedBy: userId,
+            latitude: req.body.latitude,
             longitude: req.body.longitude,
-            isAdvertorialPost: req.body.isAdvertorialPost, 
-            dataPrivacyRule: req.body.dataPrivacyRule, 
+            isAdvertorialPost: req.body.isAdvertorialPost,
+            dataPrivacyRule: req.body.dataPrivacyRule,
             category: req.body.category,
-            fontColor: req.body.fontColor || '', 
-            backgroundColor: req.body.bgColor || '', 
+            fontColor: req.body.fontColor || '',
+            backgroundColor: req.body.bgColor || '',
             type: req.body.type || '',
             address: data.results[0].formatted_address || '',
             placeId: data.results[0].place_id || '',
             commentAllowed: req.body.commentAllowed || true,
             zipCode: postalCode || ''
-        };
+          };
           app.postController.createPost(postJson, function (error, createdPost) {
             if (error || !createdPost) {
               return res.status(500).json({ error: error });
             }
             else {
               let contentObj = {
-                contentId : createdPost._id,
-                contentType : "Post",
-                contentSubType : req.body.type,
+                contentId: createdPost._id,
+                contentType: "Post",
+                contentSubType: req.body.type,
               }
               app.postController.createContent(contentObj, function (error, createdPostContent) {
                 if (error || !createdPostContent) {
                   return res.status(500).json({ error: error });
                 }
                 else {
-                  return getPostById(createdPost._id, req.user.user_id, "Post Created", res,"true");
+                  return getPostById(createdPost._id, req.user.user_id, "Post Created", res, "true");
                 }
               })
             }
           })
-        })               
+        })
       });
     }
   });
@@ -270,7 +275,7 @@ postRouter.post("/post/bookmark", auth, (req, res) => {
           }
           else {
             return getPostById(existedPost._id, req.user.user_id, "Post Bookmark Created", res);
-                    }
+          }
         });
       }
     }
@@ -300,7 +305,7 @@ postRouter.post("/post/bookmark", auth, (req, res) => {
 //     // console.log("pageSizepageSize",pageSize,"countcount",count)
 //     postParams.pageSize = Math.ceil(postParams.pageSize - pageSize)
 
-    
+
 //     app.postController.getPost(postParams, function (error, postsList) {
 //       if (error) {
 //         res.status(400).json({ error: error });
@@ -320,7 +325,7 @@ postRouter.post("/post/bookmark", auth, (req, res) => {
 //           latitude: req.body.latitude,
 //           fetchAdvertorialPost: true
 //         }
-        
+
 //         app.postController.getPost(advPostParams, function (error, advPostsList) {
 //           if (error) {
 //             res.status(400).json({ error: error });
@@ -404,19 +409,19 @@ postRouter.post('/post/get', auth, async (req, res) => {
     ]);
 
     // Interleave regular and advertorial posts
-     let finalPosts = [];    
+    let finalPosts = [];
     const combinedPosts = [...regularPosts.posts, ...advertorialPosts.posts];
     //combinedPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     const startIndex = postParams.page * postParams.pageSize;
-    
+
     const paginatedPosts = combinedPosts.slice(startIndex, startIndex + postParams.pageSize);
 
     for (let i = 0; i < paginatedPosts.length; i++) {
-        finalPosts.push(helpers.getPostObject(paginatedPosts[i], req.user.user_id));
-       
-      }
-      
-      var pagination = {
+      finalPosts.push(helpers.getPostObject(paginatedPosts[i], req.user.user_id));
+
+    }
+
+    var pagination = {
       pageSize: postParams.pageSize,
       nextPage: postParams.page + 1,
       length: finalPosts.length,
@@ -444,7 +449,7 @@ postRouter.get('/post/get/:postId', auth, (req, res) => {
   }
 });
 
-postRouter.get('/post/getMedia/:mediaId', (req, res) => { 
+postRouter.get('/post/getMedia/:mediaId', (req, res) => {
   if (!req.params.mediaId) {
     return res.status(400).json({ error: "post image Id missing." });
   }
@@ -458,7 +463,7 @@ postRouter.get('/post/getMedia/:mediaId', (req, res) => {
       }
       else {
         var directory = './uploads/images/uploads/';
-        if(postImageData.mediaType.includes('video/')) {
+        if (postImageData.mediaType.includes('video/')) {
           directory = './uploads/videos/uploads/';
         }
         var path = directory + postImageData.mediaUrl.split(/[/ ]+/).pop();
@@ -466,7 +471,7 @@ postRouter.get('/post/getMedia/:mediaId', (req, res) => {
           var img = fs.readFileSync(path);
           res.writeHead(200, { 'Content-Type': postImageData.mediaType });
           res.end(img, 'binary');
-        } catch(ex) {
+        } catch (ex) {
 
           // var img = fs.readFileSync('./uploads/images/uploads/6c9f55a6c86f88931640800786164.png');
           var img = fs.readFileSync('./uploads/images/default/download.png');
@@ -495,20 +500,19 @@ postRouter.get('/user/profilePic/:userId', async (req, res) => {
       else {
         try {
           var directory = './uploads/images/uploads/';
-          if(userData.contactPerson.profilePic != "") 
-          {
+          if (userData.contactPerson.profilePic != "") {
             var path = directory + userData.contactPerson.profilePic.split(/[/ ]+/).pop();
             try {
-            //  console.log(userData.email) 
+              //  console.log(userData.email) 
               var img = fs.readFileSync(path);
               res.writeHead(200, { 'Content-Type': 'image/png' });
               return res.end(img, 'binary');
             } catch (ex) {
               // var img = fs.readFileSync('./uploads/images/uploads/6c9f55a6c86f88931640800786164.png');
               var img = fs.readFileSync('./uploads/images/default/download.png');
-          //res.writeHead(200, { 'Content-Type': 'image/png' });
-            res.type('png')
-            res.status(200).send(img);
+              //res.writeHead(200, { 'Content-Type': 'image/png' });
+              res.type('png')
+              res.status(200).send(img);
             }
           }
           else {
@@ -529,8 +533,8 @@ postRouter.get('/partner/getCompanylogo/:partnerId', async (req, res) => {
   if (!req.params.partnerId) {
     return res.status(400).json({ error: "partnerId missing." });
   }
-  else {   
-    app.partnerController.getPartnerByPartnerId (req.params.partnerId, async function (error, partnerData) {
+  else {
+    app.partnerController.getPartnerByPartnerId(req.params.partnerId, async function (error, partnerData) {
       if (error) {
         return res.status(400).json({ error: error });
       }
@@ -540,20 +544,19 @@ postRouter.get('/partner/getCompanylogo/:partnerId', async (req, res) => {
       else {
         try {
           var directory = './uploads/images/uploads/';
-          if(partnerData.companyLogo != "") 
-          {
+          if (partnerData.companyLogo != "") {
             var path = directory + partnerData.companyLogo.split(/[/ ]+/).pop();
             try {
-            //  console.log(userData.email) 
+              //  console.log(userData.email) 
               var img = fs.readFileSync(path);
               res.writeHead(200, { 'Content-Type': 'image/png' });
               return res.end(img, 'binary');
             } catch (ex) {
               // var img = fs.readFileSync('./uploads/images/uploads/6c9f55a6c86f88931640800786164.png');
               var img = fs.readFileSync('./uploads/images/default/download.png');
-          //res.writeHead(200, { 'Content-Type': 'image/png' });
-            res.type('png')
-            res.status(200).send(img);
+              //res.writeHead(200, { 'Content-Type': 'image/png' });
+              res.type('png')
+              res.status(200).send(img);
             }
           }
           else {
@@ -598,9 +601,9 @@ postRouter.post('/post/share', auth, (req, res) => {
               }
               else {
                 let contentObj = {
-                  contentId : createdPost._id,
-                  contentType : "Post",
-                  contentSubType : existedPost.type,
+                  contentId: createdPost._id,
+                  contentType: "Post",
+                  contentSubType: existedPost.type,
                 }
                 app.postController.createContent(contentObj, function (error, createdPostContent) {
                   if (error || !createdPostContent) {
@@ -621,7 +624,7 @@ postRouter.post('/post/share', auth, (req, res) => {
 });
 
 postRouter.delete('/post/delete/:postId', auth, (req, res) => {
-  if(!req.params.postId) {
+  if (!req.params.postId) {
     res.status('400').json({ error: "Post Id Missing" });
   }
   else {
@@ -634,7 +637,7 @@ postRouter.delete('/post/delete/:postId', auth, (req, res) => {
       }
       else {
         // console.log(existedPost)
-        if(existedPost.postedBy == req.user.user_id) {
+        if (existedPost.postedBy == req.user.user_id) {
           existedPost.status = 'Deleted';
           existedPost.deletedOn = new Date();
           existedPost.deletedBy = req.user.user_id;
@@ -645,7 +648,7 @@ postRouter.delete('/post/delete/:postId', auth, (req, res) => {
             else {
 
               // Delete Post Comment and Post Images
-              app.postController.updatePostImageByPostId(existedPost._id, function(error, updatedPostComments){
+              app.postController.updatePostImageByPostId(existedPost._id, function (error, updatedPostComments) {
                 // if (error || !createdPost) {
                 //   return res.status(500).json({ error: error });
                 // }
@@ -654,22 +657,22 @@ postRouter.delete('/post/delete/:postId', auth, (req, res) => {
                 // }
               });
 
-              app.postController.updatePostCommentByPostId(existedPost._id, function(error, updatedPostComments){
+              app.postController.updatePostCommentByPostId(existedPost._id, function (error, updatedPostComments) {
                 if (error || !createdPost) {
                   return res.status(500).json({ error: error });
                 }
                 else {
-                  app.postController.deleteContentByContentId(existedPost._id, function(error, updatedPostContent){
+                  app.postController.deleteContentByContentId(existedPost._id, function (error, updatedPostContent) {
                     if (error || !updatedPostContent) {
                       return res.status(500).json({ error: error });
-                    }else {
+                    } else {
                       return res.status(200).json({ status: "true", message: "Post Deleted" });
                     }
                   })
 
                 }
               })
-              
+
             }
           });
         }
@@ -684,7 +687,7 @@ postRouter.delete('/post/delete/:postId', auth, (req, res) => {
 
 
 postRouter.delete('/post/delete_portal/:postId', auth, (req, res) => {
-  if(!req.params.postId) {
+  if (!req.params.postId) {
     res.status('400').json({ error: "Post Id Missing" });
   }
   else {
@@ -697,42 +700,42 @@ postRouter.delete('/post/delete_portal/:postId', auth, (req, res) => {
       }
       else {
         // console.log(existedPost)
-          existedPost.status = 'Deleted';
-          existedPost.deletedOn = new Date();
-          existedPost.deletedBy = req.user.user_id;
-          app.postController.updatePost(existedPost, function (error, createdPost) {
-            if (error || !createdPost) {
-              return res.status(500).json({ error: error });
-            }
-            else {
+        existedPost.status = 'Deleted';
+        existedPost.deletedOn = new Date();
+        existedPost.deletedBy = req.user.user_id;
+        app.postController.updatePost(existedPost, function (error, createdPost) {
+          if (error || !createdPost) {
+            return res.status(500).json({ error: error });
+          }
+          else {
 
-              // Delete Post Comment and Post Images
-              app.postController.updatePostImageByPostId(existedPost._id, function(error, updatedPostComments){
-                // if (error || !createdPost) {
-                //   return res.status(500).json({ error: error });
-                // }
-                // else {
-                //   return res.status(200).json({ status: "true", message: "Post Deleted" });
-                // }
-              });
+            // Delete Post Comment and Post Images
+            app.postController.updatePostImageByPostId(existedPost._id, function (error, updatedPostComments) {
+              // if (error || !createdPost) {
+              //   return res.status(500).json({ error: error });
+              // }
+              // else {
+              //   return res.status(200).json({ status: "true", message: "Post Deleted" });
+              // }
+            });
 
-              app.postController.updatePostCommentByPostId(existedPost._id, function(error, updatedPostComments){
-                if (error || !createdPost) {
-                  return res.status(500).json({ error: error });
-                }
-                else {
-                  app.postController.deleteContentByContentId(existedPost._id, function(error, updatedPostContent){
-                    if (error || !updatedPostContent) {
-                      return res.status(500).json({ error: error });
-                    }else {
-                      return res.status(200).json({ status: "true", message: "Post Deleted" });
-                    }
-                  })
-                }
-              })
-              
-            }
-          });
+            app.postController.updatePostCommentByPostId(existedPost._id, function (error, updatedPostComments) {
+              if (error || !createdPost) {
+                return res.status(500).json({ error: error });
+              }
+              else {
+                app.postController.deleteContentByContentId(existedPost._id, function (error, updatedPostContent) {
+                  if (error || !updatedPostContent) {
+                    return res.status(500).json({ error: error });
+                  } else {
+                    return res.status(200).json({ status: "true", message: "Post Deleted" });
+                  }
+                })
+              }
+            })
+
+          }
+        });
       }
     });
   }
@@ -740,7 +743,7 @@ postRouter.delete('/post/delete_portal/:postId', auth, (req, res) => {
 
 postRouter.post('/post/updateInfluencerPost', auth, (req, res) => {
 
-  console.log("########Req Body",req.body)
+  console.log("########Req Body", req.body)
 
   let uploadMedia = multer({ storage: helpers.mediaStorage, fileFilter: validator.postMediaFilter }).any();
   uploadMedia(req, res, function (err) {
@@ -752,40 +755,40 @@ postRouter.post('/post/updateInfluencerPost', auth, (req, res) => {
       return res.send(err);
     }
 
-    if(!req.body.postId) {
+    if (!req.body.postId) {
       res.status('400').json({ error: "Post Id Missing" });
-    }else {
+    } else {
       app.postController.checkInfluencerPostExistsById(req.body.postId, function (error, existedPost) {
         if (error) {
           res.status('400').json({ error: "Invalid post" });
-        }else if (existedPost.exists == false) {
+        } else if (existedPost.exists == false) {
           res.status('400').json({ error: "Invalid post" });
-        }else {
+        } else {
           var postedImages = [];
 
           for (index = 0; index < req.files.length; index++) {
             postedImages.push({ mediaUrl: path.join(__dirname, req.files[index].path), mediaType: req.files[index].mimetype });
           }
 
-          console.log("###postedImages :",postedImages)
+          console.log("###postedImages :", postedImages)
 
-          app.postController.addPostImages(req.body.postId,postedImages, function (error, updatePostImages) {
+          app.postController.addPostImages(req.body.postId, postedImages, function (error, updatePostImages) {
             if (error) {
               res.status('400').json({ error: "Invalid post" });
-            }else if (updatePostImages.exists == false) {
+            } else if (updatePostImages.exists == false) {
               res.status('400').json({ error: "Invalid post" });
-            }else {
+            } else {
               existedPost.hashtags = req.body.postHastags
               //console.log("###hashtags :",hashtags);
               app.postController.updatePost(existedPost, function (error, updatePost) {
                 if (error || !updatePost) {
                   return res.status(500).json({ error: error });
-                }else {
+                } else {
                   return res.status(200).json({ status: "true", message: "Post updated successfully" });
                 }
               })
             }
-            })
+          })
         }
       })
     }
@@ -795,7 +798,7 @@ postRouter.post('/post/updateInfluencerPost', auth, (req, res) => {
 
 
 postRouter.put('/post/edit', auth, (req, res) => {
-  if(!req.body.postId) {
+  if (!req.body.postId) {
     res.status('400').json({ error: "Post Id Missing" });
   }
   else {
@@ -807,38 +810,38 @@ postRouter.put('/post/edit', auth, (req, res) => {
         res.status('400').json({ error: "Invalid post" });
       }
       else {
-        if(existedPost.postedBy == req.user.user_id) {
-          if(req.body.hashTags) {
-            existedPost.hashtags = req.body.hashTags ;
+        if (existedPost.postedBy == req.user.user_id) {
+          if (req.body.hashTags) {
+            existedPost.hashtags = req.body.hashTags;
           }
-          if(req.body.postTitle) {
-            existedPost.postTitle = req.body.postTitle; 
+          if (req.body.postTitle) {
+            existedPost.postTitle = req.body.postTitle;
           }
-          if(req.body.postDescription) {
-            existedPost.postDescription = req.body.postDescription; 
+          if (req.body.postDescription) {
+            existedPost.postDescription = req.body.postDescription;
           }
-          if(req.body.latitude) {
+          if (req.body.latitude) {
             existedPost.latitude = req.body.latitude;
           }
-          if(req.body.longitude) {
+          if (req.body.longitude) {
             existedPost.longitude = req.body.longitude;
           }
-          if(req.body.isAdvertorialPost) {
-            existedPost.isAdvertorialPost =  req.body.isAdvertorialPost;
+          if (req.body.isAdvertorialPost) {
+            existedPost.isAdvertorialPost = req.body.isAdvertorialPost;
           }
-          if(req.body.dataPrivacyRule) {
+          if (req.body.dataPrivacyRule) {
             existedPost.dataPrivacyRule = req.body.dataPrivacyRule;
           }
-          if(req.body.category) {
+          if (req.body.category) {
             existedPost.category = req.body.category;
-          } 
-          if(req.body.fontColor) {
+          }
+          if (req.body.fontColor) {
             existedPost.fontColor = req.body.fontColor;
           }
-          if(req.body.bgColor) {
+          if (req.body.bgColor) {
             existedPost.backgroundColor = req.body.bgColor;
           }
-          if(req.body.type) {
+          if (req.body.type) {
             existedPost.type = req.body.type;
           }
           existedPost.updatedOn = new Date();
@@ -862,13 +865,13 @@ postRouter.put('/post/edit', auth, (req, res) => {
 
 postRouter.put('/post/updateStatus', auth, (req, res) => {
   let validStatus = ["Active", "Pause", "Deleted", "Deactivate", "Block"]
-  if(!req.body.postId) {
+  if (!req.body.postId) {
     return res.status('400').json({ error: "Post Id Missing" });
   }
-  if(!req.body.status) {
+  if (!req.body.status) {
     return res.status('400').json({ error: "Post Status Missing" });
   }
-  else if(!validStatus.includes(req.body.status)) {
+  else if (!validStatus.includes(req.body.status)) {
     return res.status('400').json({ error: "Post Status invalid" });
   }
   else {
@@ -883,20 +886,20 @@ postRouter.put('/post/updateStatus', auth, (req, res) => {
         existedPost.status = req.body.status;
         existedPost.updatedOn = new Date();
         existedPost.updatedBy = req.user.user_id;
-         app.postController.updatePost(existedPost, function (error, updatedPost) {
+        app.postController.updatePost(existedPost, function (error, updatedPost) {
           if (error || !updatedPost) {
             return res.status(500).json({ error: error });
           }
           else {
-            if(req.body.status == "Deleted"){
-              app.postController.deleteContentByContentId(existedPost._id, function(error, updatedPostContent){
+            if (req.body.status == "Deleted") {
+              app.postController.deleteContentByContentId(existedPost._id, function (error, updatedPostContent) {
                 if (error || !updatedPostContent) {
                   return res.status(500).json({ error: error });
-                }else {
+                } else {
                   return getPostById(existedPost._id, req.user.user_id, "Post Status Updated", res);
                 }
               })
-            }else{
+            } else {
 
               return getPostById(existedPost._id, req.user.user_id, "Post Status Updated", res);
             }
@@ -904,40 +907,40 @@ postRouter.put('/post/updateStatus', auth, (req, res) => {
         });
       }
     });
-  }  
-  
+  }
+
 });
 
 postRouter.post('/post/bookmarkedList', auth, (req, res) => {
-  
-  if(req.body.postalCode) {
+
+  if (req.body.postalCode) {
     //get lat long from postal code
-    geocoder.geocode(req.body.postalCode, function(error, data) {
-      if(error) {
+    geocoder.geocode(req.body.postalCode, function (error, data) {
+      if (error) {
         debug("post/bookmarkedList geocode error ", error);
-        return res.status(500).json({error: error})
+        return res.status(500).json({ error: error })
       }
       else {
         debug("post/bookmarkedList geocode data ", data);
         let listFilter = {
-            bookmarkedBy: req.body.userId || req.user.user_id,
-            latitude: data.latitude,
-            longitude: data.longitude,
-            radius: req.body.radius || 10,
-            pageSize: req.body.pageSize || 50,
-            page: req.body.page || 0,
-            mediaOnly: req.body.mediaOnly || false,
-            isAdvertorialPost: req.body.isAdvertorialPost || false
+          bookmarkedBy: req.body.userId || req.user.user_id,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          radius: req.body.radius || 10,
+          pageSize: req.body.pageSize || 50,
+          page: req.body.page || 0,
+          mediaOnly: req.body.mediaOnly || false,
+          isAdvertorialPost: req.body.isAdvertorialPost || false
         }
-        app.postController.getBookmarkedPost(listFilter , function(error, posts) {
+        app.postController.getBookmarkedPost(listFilter, function (error, posts) {
           if (error) {
             res.status(400).json({ error: error });
           }
           else {
             let finalPosts = [];
-            posts.forEach( x=> finalPosts.push(helpers.getPostObject(x, req.user.user_id)));
+            posts.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id)));
             let message = "Bookmarked posts found"
-            if(finalPosts.length == 0){
+            if (finalPosts.length == 0) {
               message = "Bookmarked posts not found"
             }
             return res.status(200).json({ status: "true", message: message, data: finalPosts });
@@ -948,7 +951,7 @@ postRouter.post('/post/bookmarkedList', auth, (req, res) => {
   }
   else {
     let bookmarkFilter = {
-      bookmarkedBy: req.body.userId || req.user.user_id, 
+      bookmarkedBy: req.body.userId || req.user.user_id,
       mediaOnly: req.body.mediaOnly || false,
       isAdvertorialPost: req.body.isAdvertorialPost || false,
       pageSize: req.body.pageSize || 50,
@@ -956,17 +959,17 @@ postRouter.post('/post/bookmarkedList', auth, (req, res) => {
       viewBy: req.body.viewBy || ''
     };
 
-    app.postController.getBookmarkedPost(bookmarkFilter , function(error, posts) {
+    app.postController.getBookmarkedPost(bookmarkFilter, function (error, posts) {
       if (error) {
         res.status(400).json({ error: error });
       }
       else {
         let finalPosts = [];
-        posts.forEach( x=> finalPosts.push(helpers.getPostObject(x, req.user.user_id)));
+        posts.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id)));
         let message = "Bookmarked posts found"
-            if(finalPosts.length == 0){
-              message = "Bookmarked posts not found"
-            }
+        if (finalPosts.length == 0) {
+          message = "Bookmarked posts not found"
+        }
         return res.status(200).json({ status: "true", message: message, data: finalPosts });
       }
     });
@@ -975,7 +978,7 @@ postRouter.post('/post/bookmarkedList', auth, (req, res) => {
 
 
 postRouter.get('/post/hide/:postId', auth, (req, res) => {
-  if(!req.params.postId) {
+  if (!req.params.postId) {
     res.status('400').json({ error: "Post Id Missing" });
   }
   else {
@@ -987,16 +990,16 @@ postRouter.get('/post/hide/:postId', auth, (req, res) => {
         res.status('400').json({ error: "Invalid post" });
       }
       else {
-        if(existedPost.postedBy == req.user.user_id) {
+        if (existedPost.postedBy == req.user.user_id) {
           res.status('401').json({ error: "unable to hide this user" });
         }
         else {
           let hiddenUserJson = {
             userId: req.user.user_id,
-            hiddenUser: existedPost.postedBy 
+            hiddenUser: existedPost.postedBy
           }
-          app.userController.addHiddenUser(hiddenUserJson, function(error, hiddenPost) {
-            if(error || !hiddenPost) {
+          app.userController.addHiddenUser(hiddenUserJson, function (error, hiddenPost) {
+            if (error || !hiddenPost) {
               res.status('400').json({ error: error });
             }
             else {
@@ -1012,33 +1015,33 @@ postRouter.get('/post/hide/:postId', auth, (req, res) => {
 postRouter.get('/post/snooze/:postId', auth, (req, res) => {
   // console.log("/post/snooze_1 ", req);
   // console.log("/post/snooze ", req.user);
-  if(!req.params.postId) {
+  if (!req.params.postId) {
     res.status('400').json({ error: "Post Id Missing" });
   }
   else {
     //console.log("post Snooze...")
     app.postController.checkPostExistsById(req.params.postId, function (error, existedPost) {
-      
-    //console.log("post Snooze...1", error, existedPost);
+
+      //console.log("post Snooze...1", error, existedPost);
       if (error) {
-        return res.status('500').json({ error: erorr});
+        return res.status('500').json({ error: erorr });
       }
       else if (existedPost.exists == false) {
         return res.status('400').json({ error: "Invalid post" });
       }
       else {
         // console.log(req.user);
-        if(req.user!= undefined && existedPost.postedBy == req.user.user_id) {
+        if (req.user != undefined && existedPost.postedBy == req.user.user_id) {
           res.status('401').json({ error: "own post cannot be snoozed." });
         }
         else {
           let snoozeUserJson = {
-            userId: req.user!= undefined ? req.user.user_id : '',
-            snoozedUser: existedPost.postedBy 
+            userId: req.user != undefined ? req.user.user_id : '',
+            snoozedUser: existedPost.postedBy
           }
           // console.log("snoozeUserJson ", snoozeUserJson);
-          app.userController.createUserSnoozedAccount(snoozeUserJson, function(error, snoozedPost) {
-            if(error || !snoozedPost) {
+          app.userController.createUserSnoozedAccount(snoozeUserJson, function (error, snoozedPost) {
+            if (error || !snoozedPost) {
               res.status('500').json({ error: error });
             }
             else {
@@ -1061,7 +1064,7 @@ postRouter.post('/post/comment/add', auth, (req, res) => {
     return res.status(400).json({ error: "invalid comment." });
   }
   app.postController.checkPostExistsById(req.body.postId, function (error, existedPost) {
-   
+
     // console.log("existedPost ", existedPost)
     if (error) {
       res.json({ error: error });
@@ -1069,7 +1072,7 @@ postRouter.post('/post/comment/add', auth, (req, res) => {
     else if (existedPost.exists == false) {
       return res.status(400).json({ error: "invalid post id." });
     }
-    else if(existedPost.commentAllowed == false) {
+    else if (existedPost.commentAllowed == false) {
       return res.status(400).json({ error: "comments are not allowed on this post." });
     }
     else {
@@ -1085,7 +1088,7 @@ postRouter.post('/post/comment/add', auth, (req, res) => {
         else {
 
           debug(req.user);
-          return res.status(200).json({ status: "true", message: "Post Comment Created", data: [helpers.getPostCommentObject(createdPostComment,req.user)] });
+          return res.status(200).json({ status: "true", message: "Post Comment Created", data: [helpers.getPostCommentObject(createdPostComment, req.user)] });
 
         }
       });
@@ -1119,7 +1122,7 @@ postRouter.post('/post/comment/addReply', auth, (req, res) => {
           return res.status(500).json({ error: error });
         }
         else {
-          
+
           app.postController.getPostComment(existedPostComment.postId, function (error, postComments) {
             if (error) {
               res.status(400).json({ error: error });
@@ -1136,18 +1139,18 @@ postRouter.post('/post/comment/addReply', auth, (req, res) => {
 
               comments = postComments;
               let message = "Post Comment Reply Created";
-              if(comments.length == 0){
+              if (comments.length == 0) {
                 message = "Post Comment Reply not Created";
               }
 
 
               return res.status(200).json({ status: "true", message: message, data: comments });
             }
-      });
+          });
         }
       });
     }
-});
+  });
 });
 
 postRouter.get('/post/getReportedPost/:userId', auth, (req, res) => {
@@ -1155,7 +1158,7 @@ postRouter.get('/post/getReportedPost/:userId', auth, (req, res) => {
     res.status(400).json({ error: "user id is missing" });
   }
   else {
-    app.postController.getPostList({postedBy: req.params.userId, isReported: true}, function(error, postList) {
+    app.postController.getPostList({ postedBy: req.params.userId, isReported: true }, function (error, postList) {
       if (error || !postList) {
         return res.status(400).json({ error: error });
       }
@@ -1163,11 +1166,11 @@ postRouter.get('/post/getReportedPost/:userId', auth, (req, res) => {
         finalPosts = [];
         postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id)));
         let message = "Post List";
-        if(finalPosts.length == 0){
+        if (finalPosts.length == 0) {
           message = "Post List not found";
         }
         return res.status(200).json({ status: "true", message: message, data: finalPosts });
-    
+
       }
     });
   }
@@ -1189,9 +1192,9 @@ postRouter.get('/post/comment/get/:postId', auth, (req, res) => {
           comments.push(helpers.getPostCommentObject(x, req.user));
 
         });
-        if(comments.length != 0){
+        if (comments.length != 0) {
           return res.status(200).json({ status: "true", message: "Post Comments Found", data: comments });
-        }else{
+        } else {
           return res.status(200).json({ status: "true", message: "Post Comments Not Found", data: comments });
         }
       }
@@ -1219,7 +1222,7 @@ postRouter.get('/post/comment/getReplyComment/:commentId', auth, (req, res) => {
           })
         });
         let message = "Post Comment Replies Found";
-        if(comments.length == 0){
+        if (comments.length == 0) {
           message = "Post Comment Replies not Found";
         }
         return res.status(200).json({ status: "true", message: message, data: comments });
@@ -1230,92 +1233,92 @@ postRouter.get('/post/comment/getReplyComment/:commentId', auth, (req, res) => {
 });
 
 postRouter.delete('/post/comment/delete/:postCommentId', auth, (req, res) => {
-  if(!req.params.postCommentId) {
+  if (!req.params.postCommentId) {
     return res.status(400).json({ error: "invalid comment id." });
   }
   else {
-  app.postController.checkPostCommentExistsById(req.params.postCommentId, function (error, existedPostComment) {
-    if (error) {
-      res.status(400).json({ error: error });
-    }
-    if (existedPostComment.exists == false) {
-      return res.status(400).json({ error: "invalid comment id." });
-    }
-    else {
-      if(existedPostComment.commentedBy == req.user.user_id && existedPostComment.status == "Active") {
-        existedPostComment.status = "Deleted";
-        existedPostComment.deletedOn = new Date();
-        existedPostComment.deletedBy = req.user.user_id;
-        existedPostComment.replyComment.forEach(x => {
-          x.status = "Deleted";
-          x.deletedOn = new Date();
-          x.deletedBy = req.user.user_id;
-        });
-        app.postController.updatePostComment(existedPostComment, function(error, updatedPostComment) {
-          if (error) {
-            res.status(400).json({ error: error });
-          }
-          else {
-            return res.status(200).json({ status: "true", message: "Post Comment Deleted", data: updatedPostComment });
-          }
-        });
+    app.postController.checkPostCommentExistsById(req.params.postCommentId, function (error, existedPostComment) {
+      if (error) {
+        res.status(400).json({ error: error });
+      }
+      if (existedPostComment.exists == false) {
+        return res.status(400).json({ error: "invalid comment id." });
       }
       else {
-        return res.status(401).json({ error: "not authorised to delete comment." });
+        if (existedPostComment.commentedBy == req.user.user_id && existedPostComment.status == "Active") {
+          existedPostComment.status = "Deleted";
+          existedPostComment.deletedOn = new Date();
+          existedPostComment.deletedBy = req.user.user_id;
+          existedPostComment.replyComment.forEach(x => {
+            x.status = "Deleted";
+            x.deletedOn = new Date();
+            x.deletedBy = req.user.user_id;
+          });
+          app.postController.updatePostComment(existedPostComment, function (error, updatedPostComment) {
+            if (error) {
+              res.status(400).json({ error: error });
+            }
+            else {
+              return res.status(200).json({ status: "true", message: "Post Comment Deleted", data: updatedPostComment });
+            }
+          });
+        }
+        else {
+          return res.status(401).json({ error: "not authorised to delete comment." });
+        }
       }
-    }
-  });
+    });
   }
 });
 
 postRouter.put('/post/comment/update', auth, (req, res) => {
-  if(!req.body.postCommentId) {
+  if (!req.body.postCommentId) {
     return res.status(400).json({ error: "invalid comment id." });
   }
-  if(!req.body.comment) {
+  if (!req.body.comment) {
     return res.status(400).json({ error: "invalid comment." });
   }
   else {
-  app.postController.checkPostCommentExistsById(req.body.postCommentId, function (error, existedPostComment) {
-    if (error) {
-      res.status(400).json({ error: error });
-    }
-    if (existedPostComment.exists == false) {
-      return res.status(400).json({ error: "invalid comment id." });
-    }
-    else {
-      if(existedPostComment.commentedBy == req.user.user_id && existedPostComment.replyComment.length == 0 && existedPostComment.status == "Active") {
-        existedPostComment.comment = req.body.comment;
-        existedPostComment.updatedOn = new Date();
-        existedPostComment.updatedBy = req.user.user_id;
-        app.postController.updatePostComment(existedPostComment, function(error, updatedPostComment) {
-          if (error) {
-            res.status(400).json({ error: error });
-          }
-          else {
-            return res.status(200).json({ status: "true", message: "Post Comment Updated", data: [helpers.getPostCommentObject(updatedPostComment, req.user)] });
-          }
-        });
+    app.postController.checkPostCommentExistsById(req.body.postCommentId, function (error, existedPostComment) {
+      if (error) {
+        res.status(400).json({ error: error });
+      }
+      if (existedPostComment.exists == false) {
+        return res.status(400).json({ error: "invalid comment id." });
       }
       else {
-        if(existedPostComment.replyComment.length > 0) {
-          return res.status(400).json({ error: "This comment has replies, so can't be updated." });
+        if (existedPostComment.commentedBy == req.user.user_id && existedPostComment.replyComment.length == 0 && existedPostComment.status == "Active") {
+          existedPostComment.comment = req.body.comment;
+          existedPostComment.updatedOn = new Date();
+          existedPostComment.updatedBy = req.user.user_id;
+          app.postController.updatePostComment(existedPostComment, function (error, updatedPostComment) {
+            if (error) {
+              res.status(400).json({ error: error });
+            }
+            else {
+              return res.status(200).json({ status: "true", message: "Post Comment Updated", data: [helpers.getPostCommentObject(updatedPostComment, req.user)] });
+            }
+          });
         }
-        else if(existedPostComment.commentedBy != req.user.user_id) {
-          return res.status(400).json({ error: "You can update only your comment." });
-        }
-        else if(existedPostComment.status != "Active") {
-          return res.status(400).json({ error: "Invalid comment Id." });
+        else {
+          if (existedPostComment.replyComment.length > 0) {
+            return res.status(400).json({ error: "This comment has replies, so can't be updated." });
+          }
+          else if (existedPostComment.commentedBy != req.user.user_id) {
+            return res.status(400).json({ error: "You can update only your comment." });
+          }
+          else if (existedPostComment.status != "Active") {
+            return res.status(400).json({ error: "Invalid comment Id." });
+          }
         }
       }
-    }
-  });
+    });
   }
 });
 
 postRouter.get('/post/comment/preventComment/:postId', auth, (req, res) => {
-  if(!req.params.postId) {
-   return res.status(400).json({ error: "Post id is missing" });
+  if (!req.params.postId) {
+    return res.status(400).json({ error: "Post id is missing" });
   }
   app.postController.checkPostExistsById(req.params.postId, function (error, existedPost) {
     if (error) {
@@ -1328,7 +1331,7 @@ postRouter.get('/post/comment/preventComment/:postId', auth, (req, res) => {
       existedPost.commentAllowed = false;;
       existedPost.updatedOn = new Date();
       existedPost.updatedBy = req.user.user_id;
-       app.postController.updatePost(existedPost, function (error, updatedPost) {
+      app.postController.updatePost(existedPost, function (error, updatedPost) {
         if (error || !updatedPost) {
           return res.status(500).json({ error: error });
         }
@@ -1347,50 +1350,50 @@ postRouter.post('/post/list', auth, async (req, res) => {
   let filter = {
     pageSize: req.body.pageSize || 50,
     page: req.body.page || 0,
-    postedBy: req.body.userId || '', 
-    sortOrder: req.body.sortOrder, 
-    sortBy: req.body.sortBy, 
-    fromDate: req.body.fromDate, 
+    postedBy: req.body.userId || '',
+    sortOrder: req.body.sortOrder,
+    sortBy: req.body.sortBy,
+    fromDate: req.body.fromDate,
     toDate: req.body.toDate,
     Categories: req.body.Categories || '',
     partnerId: req.body.partnerId || '',
-    panalties:'false'
+    panalties: 'false'
   }
-app.postController.getPostList( filter, function(error, postList) {
-   if (error || !postList) {
-    return res.status(400).json({ error: error });
-  }
-  else {
-    finalPosts = [];
-    app.databaseController.checkUserExistsById(req.user.user_id, async function (error, userData) {
-      if (error) {
-        return res.status(400).json({ error: error });
-      }
-      else if (userData.exists == false) {
-        return res.status(400).json({ error: "invalid user id" });
-      }
-      else {
-        for(let i=0; i<postList.posts.length; i++){
-          let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, userData)
-          finalPosts.push(x)
+  app.postController.getPostList(filter, function (error, postList) {
+    if (error || !postList) {
+      return res.status(400).json({ error: error });
+    }
+    else {
+      finalPosts = [];
+      app.databaseController.checkUserExistsById(req.user.user_id, async function (error, userData) {
+        if (error) {
+          return res.status(400).json({ error: error });
         }
-        // postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
-        let message = "Post List";
-        if(finalPosts.length == 0){
-          message = "Post List not found";
+        else if (userData.exists == false) {
+          return res.status(400).json({ error: "invalid user id" });
         }
-        return res.status(200).json({ status: "true", message: message, data: {finalPosts,totalCount:postList.postCount} });
-      } 
-    });
+        else {
+          for (let i = 0; i < postList.posts.length; i++) {
+            let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, userData)
+            finalPosts.push(x)
+          }
+          // postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
+          let message = "Post List";
+          if (finalPosts.length == 0) {
+            message = "Post List not found";
+          }
+          return res.status(200).json({ status: "true", message: message, data: { finalPosts, totalCount: postList.postCount } });
+        }
+      });
 
-  }
-});
+    }
+  });
 });
 
 
 postRouter.post('/reported_post/list', auth, async (req, res) => {
   let filter = {
-    partnerInfluencerId : req.body.partnerInfluencerId || "",
+    partnerInfluencerId: req.body.partnerInfluencerId || "",
     pageSize: req.body.pageSize || 50,
     page: req.body.page || 0,
     postedBy: req.body.userId || "",
@@ -1424,7 +1427,7 @@ postRouter.post('/reported_post/list', auth, async (req, res) => {
           // postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
           const finalPosts = await Promise.all(postList.posts.map(post => helpers.getPostObject2(post, req.user.userId, userData)));
           let message = "Post List";
-          if(finalPosts.length == 0){
+          if (finalPosts.length == 0) {
             message = "Post List not found";
           }
           return res.status(200).json({ status: "true", message: message, data: { finalPosts, totalCount: postList.postCount } });
@@ -1437,7 +1440,7 @@ postRouter.post('/reported_post/list', auth, async (req, res) => {
 
 
 postRouter.post('/post/photoRoll', auth, (req, res) => {
-  app.postController.getPostList({postedBy: req.user.user_id, imagePostOnly: true }, function(error, postList) {
+  app.postController.getPostList({ postedBy: req.user.user_id, imagePostOnly: true }, function (error, postList) {
     if (error || !postList) {
       return res.status(400).json({ error: error });
     }
@@ -1451,13 +1454,14 @@ postRouter.post('/post/photoRoll', auth, (req, res) => {
           return res.status(400).json({ error: "invalid user id" });
         }
         else {
-      postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
-      let message = "Photo Roll List";
-      if(finalPosts.length == 0){
-        message = "Photo Roll List not found";
-      }
-      return res.status(200).json({ status: "true", message: message, data: finalPosts });
-    }});
+          postList.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
+          let message = "Photo Roll List";
+          if (finalPosts.length == 0) {
+            message = "Photo Roll List not found";
+          }
+          return res.status(200).json({ status: "true", message: message, data: finalPosts });
+        }
+      });
     }
   });
 });
@@ -1465,12 +1469,12 @@ postRouter.post('/post/photoAlbum', auth, (req, res) => {
   // if(!req.body.radius) {
   //   return res.status(400).json({ error: "radius is missing." });
   // }
-  if(!req.body.postalCode) {
+  if (!req.body.postalCode) {
     return res.status(400).json({ error: "postal code is missing." });
   }
   //get lat long from postal code
-  geocoder.geocode(req.body.postalCode, function(error, data) {
-    if(error) {
+  geocoder.geocode(req.body.postalCode, function (error, data) {
+    if (error) {
       debug("photoAlbum geocode error ", error);
     }
     else {
@@ -1485,84 +1489,86 @@ postRouter.post('/post/photoAlbum', auth, (req, res) => {
         fetchAdvertorialPost: false,
         fromDate: req.body.fromDate,
         toDate: req.body.toDate
-    }
-    app.postController.getLikedPost(_listFilter, function(error, likedPostList) {
-      if (error) {
-        return res.status(400).json({ error: error });
       }
-      else {
-        app.partnerController.getLikedPartner(_listFilter, function(error, likedPartnerList) {
-          if(error) {
-            return res.status(400).json({ error: error });
-          }
-          else {
-            var finalPosts = [];
-            for (let i = 0; i < likedPostList.length; i++) {
-              if(likedPostList[i].postImages.length > 0) {
-                finalPosts.push(helpers.getPostObject(likedPostList[i], req.user.user_id));
+      app.postController.getLikedPost(_listFilter, function (error, likedPostList) {
+        if (error) {
+          return res.status(400).json({ error: error });
+        }
+        else {
+          app.partnerController.getLikedPartner(_listFilter, function (error, likedPartnerList) {
+            if (error) {
+              return res.status(400).json({ error: error });
+            }
+            else {
+              var finalPosts = [];
+              for (let i = 0; i < likedPostList.length; i++) {
+                if (likedPostList[i].postImages.length > 0) {
+                  finalPosts.push(helpers.getPostObject(likedPostList[i], req.user.user_id));
+                }
               }
+              var pagination = {
+                pageSize: _listFilter.pageSize,
+                nextPage: _listFilter.page + 1,
+                postLength: finalPosts.length,
+                partnerLength: likedPartnerList.length
+              }
+              let message = "Posts found";
+              if (finalPosts.length == 0 && likedPartnerList.length == 0) {
+                message = "Posts not found";
+              }
+              return res.status(200).json({
+                status: true, message: message,
+                data: { pagination: pagination, posts: finalPosts, partners: likedPartnerList }
+              });
             }
-            var pagination = {
-              pageSize: _listFilter.pageSize,
-              nextPage: _listFilter.page + 1,
-              postLength: finalPosts.length,
-              partnerLength: likedPartnerList.length
-            }
-            let message = "Posts found";
-            if(finalPosts.length == 0 && likedPartnerList.length == 0){
-              message = "Posts not found";
-            }
-            return res.status(200).json({status: true, message: message, 
-            data:{ pagination: pagination, posts: finalPosts, partners: likedPartnerList }});
-          }
-        });
-      }
-    });
+          });
+        }
+      });
     }
   });
 });
 
-postRouter.post('/post/getAllPosts', auth ,(req, res) => { 
+postRouter.post('/post/getAllPosts', auth, (req, res) => {
   let Obj = {
     pageSize: req.body.pageSize || 10,
     page: req.body.page || 0,
-    fromDate : req.body.fromDate || '',
-    toDate : req.body.toDate || '',
-    Categories : req.body.Categories || ''
+    fromDate: req.body.fromDate || '',
+    toDate: req.body.toDate || '',
+    Categories: req.body.Categories || ''
   }
-  app.postController.getPostList( Obj, function(error, postList) {
+  app.postController.getPostList(Obj, function (error, postList) {
     if (error || !postList) {
-     return res.status(400).json({ error: error });
-   } else {
-     finalPosts = [];
-     app.databaseController.checkUserExistsById(req.user.user_id, async function (error, userData) {
-       if (error) {
-         return res.status(400).json({ error: error });
-       } else if (userData.exists == false) {
-         return res.status(400).json({ error: "invalid user id" });
-       } else {
-         for(let i=0; i<postList.posts.length; i++){
-           let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, userData)
-           finalPosts.push(x)
-         }
-        //  postList.posts.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
-        let message = "Post List";
-        if(finalPosts.length == 0){
-          message = "Post List not found";
+      return res.status(400).json({ error: error });
+    } else {
+      finalPosts = [];
+      app.databaseController.checkUserExistsById(req.user.user_id, async function (error, userData) {
+        if (error) {
+          return res.status(400).json({ error: error });
+        } else if (userData.exists == false) {
+          return res.status(400).json({ error: "invalid user id" });
+        } else {
+          for (let i = 0; i < postList.posts.length; i++) {
+            let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, userData)
+            finalPosts.push(x)
+          }
+          //  postList.posts.forEach(x => finalPosts.push(helpers.getPostObject(x, req.user.user_id, userData)));
+          let message = "Post List";
+          if (finalPosts.length == 0) {
+            message = "Post List not found";
+          }
+          return res.status(200).json({ status: "true", message: message, data: { finalPosts: finalPosts, totalCount: postList.postCount } });
         }
-         return res.status(200).json({ status: "true", message: message, data: {finalPosts:finalPosts,totalCount:postList.postCount} });
-       } 
-     });
- 
-   }
- });
+      });
+
+    }
+  });
 
 
 });
 
 postRouter.post('/post/getPublic', (req, res) => {
-  if(!req.body.longitude || !req.body.latitude) {
-    res.status(400).json({error : "Location parameter missing."});
+  if (!req.body.longitude || !req.body.latitude) {
+    res.status(400).json({ error: "Location parameter missing." });
   }
   else {
     var postParams = {
@@ -1603,31 +1609,31 @@ postRouter.post('/post/getPublic', (req, res) => {
           // }
           else {
             var finalPosts = [];
-                if (postsList.length > 0 && advPostsList.length > 0) {
-                  var chunkPosts = helpers.chunkArray(postsList, advPostCount);
-                  for (let i = 0, j = 0; i < chunkPosts.length, j < advPostsList.length; i++, j++) {
-                    if (chunkPosts[i]) {
-                      chunkPosts[i].forEach(element => { finalPosts.push(helpers.getPostObject(element, null)) });
-                    }
-                    if (advPostsList[j]) { finalPosts.push(helpers.getPostObject(advPostsList[j], null)); }
-                  }
+            if (postsList.length > 0 && advPostsList.length > 0) {
+              var chunkPosts = helpers.chunkArray(postsList, advPostCount);
+              for (let i = 0, j = 0; i < chunkPosts.length, j < advPostsList.length; i++, j++) {
+                if (chunkPosts[i]) {
+                  chunkPosts[i].forEach(element => { finalPosts.push(helpers.getPostObject(element, null)) });
                 }
-                else if(postsList.length > 0 && advPostsList.length == 0) {
-                  for (let i = 0; i < postsList.length; i++) {
-                    finalPosts.push(helpers.getPostObject(postsList[i], null));
-                  }
-                }
-                else if(postsList.length == 0 && advPostsList.length > 0) {
-                  for (let i = 0; i < advPostsList.length; i++) {
-                    finalPosts.push(helpers.getPostObject(advPostsList[i], null));
-                  }
-                }
-                var pagination = {
-                  pageSize: postParams.pageSize,
-                  nextPage: postParams.page + 1,
-                  length: finalPosts.length
-                }
-                return res.json({ pagination: pagination, posts: finalPosts });
+                if (advPostsList[j]) { finalPosts.push(helpers.getPostObject(advPostsList[j], null)); }
+              }
+            }
+            else if (postsList.length > 0 && advPostsList.length == 0) {
+              for (let i = 0; i < postsList.length; i++) {
+                finalPosts.push(helpers.getPostObject(postsList[i], null));
+              }
+            }
+            else if (postsList.length == 0 && advPostsList.length > 0) {
+              for (let i = 0; i < advPostsList.length; i++) {
+                finalPosts.push(helpers.getPostObject(advPostsList[i], null));
+              }
+            }
+            var pagination = {
+              pageSize: postParams.pageSize,
+              nextPage: postParams.page + 1,
+              length: finalPosts.length
+            }
+            return res.json({ pagination: pagination, posts: finalPosts });
           }
         });
       }
@@ -1636,270 +1642,270 @@ postRouter.post('/post/getPublic', (req, res) => {
 
 });
 
-postRouter.post('/post/getContent',auth, (req, res) => {
-    var contentObj = {
-      pageSize: req.body.pageSize || 10,
-      page: req.body.page || 0,
-      Categories : req.body.Categories || '',
-      fromDate : req.body.fromDate || '',
-      toDate : req.body.toDate || ''
-    }
-    app.postController.getAllContentList(contentObj, async function (error, contentList) {
-      
-      if (error) {
-        res.status(400).json({ error: error });
-      }else{
-        let coupinoId = []
-        let postId = []
-        contentList.data.forEach(v=> {
-          if(v.contentType == 'Coupino'){
-            let id = mongoose.Types.ObjectId(v.contentId);
-            coupinoId.push(id)
-          }else if(v.contentType == 'Post'){
-            let id = mongoose.Types.ObjectId(v.contentId);
-            postId.push(id)
-          }
-        })
-        finalContent = [];
-        if(postId.length != 0 && coupinoId.length != 0 ){
-          let Obj = {
-            pageSize: 100,
-            page: 0,
-            postId : postId || [],
-          }
-          app.postController.getPostList( Obj, async function(error, postList) {
-            if (error || !postList) {
-             return res.status(400).json({ error: error });
-           } else {
-              for(let i=0; i<postList.posts.length; i++){
-                let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, "")
-                finalContent.push(x)
+postRouter.post('/post/getContent', auth, (req, res) => {
+  var contentObj = {
+    pageSize: req.body.pageSize || 10,
+    page: req.body.page || 0,
+    Categories: req.body.Categories || '',
+    fromDate: req.body.fromDate || '',
+    toDate: req.body.toDate || ''
+  }
+  app.postController.getAllContentList(contentObj, async function (error, contentList) {
+
+    if (error) {
+      res.status(400).json({ error: error });
+    } else {
+      let coupinoId = []
+      let postId = []
+      contentList.data.forEach(v => {
+        if (v.contentType == 'Coupino') {
+          let id = mongoose.Types.ObjectId(v.contentId);
+          coupinoId.push(id)
+        } else if (v.contentType == 'Post') {
+          let id = mongoose.Types.ObjectId(v.contentId);
+          postId.push(id)
+        }
+      })
+      finalContent = [];
+      if (postId.length != 0 && coupinoId.length != 0) {
+        let Obj = {
+          pageSize: 100,
+          page: 0,
+          postId: postId || [],
+        }
+        app.postController.getPostList(Obj, async function (error, postList) {
+          if (error || !postList) {
+            return res.status(400).json({ error: error });
+          } else {
+            for (let i = 0; i < postList.posts.length; i++) {
+              let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, "")
+              finalContent.push(x)
+            }
+            console.log("post length---------------", finalContent.length)
+            let listFilters = {
+              status: req.body.status || "All",
+              radius: 0,
+              pageSize: 100,
+              page: 0,
+              user_id: req.user.user_id,
+              viewBy: req.body.viewBy || '',
+              coupinoId: coupinoId || []
+            }
+            app.coupinosController.getContentCoupinoList(listFilters, function (error, coupinosData) {
+              if (error || !coupinosData) {
+                return res.status(400).json({ error: error });
               }
-              console.log("post length---------------",finalContent.length)
-              let listFilters = {
-                status:req.body.status || "All",
-                radius:  0,
-                pageSize: 100,
-                page: 0,
-                user_id: req.user.user_id,
-                viewBy: req.body.viewBy || '',
-                coupinoId : coupinoId || []
-              }
-              app.coupinosController.getContentCoupinoList(listFilters, function(error, coupinosData) {
-                if (error || !coupinosData) {
-                  return res.status(400).json({ error: error });
+              else {
+                if (coupinosData.list && coupinosData.list.length > 0) {
+                  coupinosData.list.forEach(c => {
+                    finalContent.push(createCoupinoObject(c, req.user.user_id));
+                  });
                 }
-                else {
-                  if(coupinosData.list && coupinosData.list.length > 0) {
-                    coupinosData.list.forEach(c => {
-                      finalContent.push(createCoupinoObject(c,req.user.user_id));
-                    });
-                }
-                console.log("postwoith coupino---------------",finalContent.length)
+                console.log("postwoith coupino---------------", finalContent.length)
                 let Obj = {
-                  totalCount:contentList.totalCount,
-                  data:finalContent
+                  totalCount: contentList.totalCount,
+                  data: finalContent
                 }
                 res.status(200).json({ data: Obj });
               }
-              });
-           }
-         });
-        }else if(coupinoId.length != 0 && postId.length == 0 ){
-          let listFilters = {
-            status:req.body.status || "All",
-            radius:  0,
-            pageSize: 100,
-            page: 0,
-            user_id: req.user.user_id,
-            viewBy: req.body.viewBy || '',
-            coupinoId : coupinoId || []
+            });
           }
-          app.coupinosController.getContentCoupinoList(listFilters, function(error, coupinosData) {
-            if (error || !coupinosData) {
-              return res.status(400).json({ error: error });
+        });
+      } else if (coupinoId.length != 0 && postId.length == 0) {
+        let listFilters = {
+          status: req.body.status || "All",
+          radius: 0,
+          pageSize: 100,
+          page: 0,
+          user_id: req.user.user_id,
+          viewBy: req.body.viewBy || '',
+          coupinoId: coupinoId || []
+        }
+        app.coupinosController.getContentCoupinoList(listFilters, function (error, coupinosData) {
+          if (error || !coupinosData) {
+            return res.status(400).json({ error: error });
+          }
+          else {
+            if (coupinosData.list && coupinosData.list.length > 0) {
+              coupinosData.list.forEach(c => {
+                finalContent.push(createCoupinoObject(c, req.user.user_id));
+              });
             }
-            else {
-              if(coupinosData.list && coupinosData.list.length > 0) {
-                coupinosData.list.forEach(c => {
-                  finalContent.push(createCoupinoObject(c,req.user.user_id));
-                });
-            }
-            console.log("only coupino---------------",finalContent.length)
+            console.log("only coupino---------------", finalContent.length)
             let Obj = {
-              totalCount:contentList.totalCount,
-              data:finalContent
+              totalCount: contentList.totalCount,
+              data: finalContent
             }
             res.status(200).json({ data: Obj });
           }
-          });
-        }else if(coupinoId.length == 0 && postId.length != 0){
-          let Obj = {
-            pageSize: 100,
-            page: 0,
-            postId : postId || [],
-          }
-          app.postController.getPostList( Obj, async function(error, postList) {
-            if (error || !postList) {
-             return res.status(400).json({ error: error });
-           } else {
-              for(let i=0; i<postList.posts.length; i++){
-                let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, "")
-                finalContent.push(x)
-              }
-              console.log("only post---------------",finalContent.length)
-              let Obj = {
-                totalCount:contentList.totalCount,
-                data:finalContent
-              }
-              res.status(200).json({ data: Obj });
-            }
-          })
-        }else{
-          let Obj = {
-            totalCount:0,
-            data:[],
-            message:'data not fount'
-          }
-          res.status(200).json({ data: Obj });
+        });
+      } else if (coupinoId.length == 0 && postId.length != 0) {
+        let Obj = {
+          pageSize: 100,
+          page: 0,
+          postId: postId || [],
         }
+        app.postController.getPostList(Obj, async function (error, postList) {
+          if (error || !postList) {
+            return res.status(400).json({ error: error });
+          } else {
+            for (let i = 0; i < postList.posts.length; i++) {
+              let x = await helpers.getPostObject2(postList.posts[i], req.user.user_id, "")
+              finalContent.push(x)
+            }
+            console.log("only post---------------", finalContent.length)
+            let Obj = {
+              totalCount: contentList.totalCount,
+              data: finalContent
+            }
+            res.status(200).json({ data: Obj });
+          }
+        })
+      } else {
+        let Obj = {
+          totalCount: 0,
+          data: [],
+          message: 'data not fount'
+        }
+        res.status(200).json({ data: Obj });
       }
-    })
+    }
+  })
 })
 
-function createCoupinoObject(coupinoData,userId){
+function createCoupinoObject(coupinoData, userId) {
   // console.log('----------------------',coupinoData)
   let isLikedByMe = false,
-  isBookmarkedByMe = false,
-  isRedeemedByMe = false,
-  coupinoLikes = [],
-  coupinoBookmarks = [],
-  coupinoComments = [],
-  coupinoImage  = '',
-  shareDetails = {},
-  isCoupinoImages = '';
+    isBookmarkedByMe = false,
+    isRedeemedByMe = false,
+    coupinoLikes = [],
+    coupinoBookmarks = [],
+    coupinoComments = [],
+    coupinoImage = '',
+    shareDetails = {},
+    isCoupinoImages = '';
 
-coupinoData.coupinoLikes.forEach(x => {
-if (x.likedBy != undefined && x.likedBy.contactPerson != undefined) {
-  var item = {
-      _id: x.likedBy._id,
-      firstName: x.likedBy.contactPerson.firstName,
-      lastName: x.likedBy.contactPerson.lastName.charAt(0) + ".",
-      profilePicUrl: x.likedBy.contactPerson.profilePic ? '/user/profilePic/' + x.likedBy._id : "",
-      isDefaultImage: x.likedBy.contactPerson.isDefaultImage,
-      defaultImagePath: x.likedBy.contactPerson.defaultImagePath,
-      createdOn:x.createdAt
-  }
-  coupinoLikes.push(item);
-}
-});
-let likedByMe = coupinoData.coupinoLikes.find(x => x.likedBy._id == userId);
-if (likedByMe != undefined && likedByMe != null) {
-    isLikedByMe = true;
-}
-if(coupinoData.coupinoRedeemedBy != undefined && coupinoData.coupinoRedeemedBy.length != 0 ){
-let redeemedBy = coupinoData.coupinoRedeemedBy[0].reedemedBy.find(x => x.reedemedByUser == userId);
-if (redeemedBy != undefined && redeemedBy != null) {
-  isRedeemedByMe = true;
-}
-}
-coupinoData.coupinoComments.forEach(x => {
-  if (x.commentedBy != undefined && x.commentedBy.contactPerson != undefined) {
+  coupinoData.coupinoLikes.forEach(x => {
+    if (x.likedBy != undefined && x.likedBy.contactPerson != undefined) {
       var item = {
-          comment:x.comment,
-          _id: x.commentedBy._id,
-          firstName: x.commentedBy.contactPerson.firstName,
-          lastName: x.commentedBy.contactPerson.lastName.charAt(0) + ".",
-          profilePicUrl: '/user/profilePic/' + x.commentedBy._id,
-          isDefaultImage: x.commentedBy.contactPerson.isDefaultImage,
-          defaultImagePath: x.commentedBy.contactPerson.defaultImagePath,
-          createdOn:x.createdAt
+        _id: x.likedBy._id,
+        firstName: x.likedBy.contactPerson.firstName,
+        lastName: x.likedBy.contactPerson.lastName.charAt(0) + ".",
+        profilePicUrl: x.likedBy.contactPerson.profilePic ? '/user/profilePic/' + x.likedBy._id : "",
+        isDefaultImage: x.likedBy.contactPerson.isDefaultImage,
+        defaultImagePath: x.likedBy.contactPerson.defaultImagePath,
+        createdOn: x.createdAt
+      }
+      coupinoLikes.push(item);
+    }
+  });
+  let likedByMe = coupinoData.coupinoLikes.find(x => x.likedBy._id == userId);
+  if (likedByMe != undefined && likedByMe != null) {
+    isLikedByMe = true;
+  }
+  if (coupinoData.coupinoRedeemedBy != undefined && coupinoData.coupinoRedeemedBy.length != 0) {
+    let redeemedBy = coupinoData.coupinoRedeemedBy[0].reedemedBy.find(x => x.reedemedByUser == userId);
+    if (redeemedBy != undefined && redeemedBy != null) {
+      isRedeemedByMe = true;
+    }
+  }
+  coupinoData.coupinoComments.forEach(x => {
+    if (x.commentedBy != undefined && x.commentedBy.contactPerson != undefined) {
+      var item = {
+        comment: x.comment,
+        _id: x.commentedBy._id,
+        firstName: x.commentedBy.contactPerson.firstName,
+        lastName: x.commentedBy.contactPerson.lastName.charAt(0) + ".",
+        profilePicUrl: '/user/profilePic/' + x.commentedBy._id,
+        isDefaultImage: x.commentedBy.contactPerson.isDefaultImage,
+        defaultImagePath: x.commentedBy.contactPerson.defaultImagePath,
+        createdOn: x.createdAt
       }
       coupinoComments.push(item);
-  }
-});
+    }
+  });
 
-coupinoData.coupinoBookmarks.forEach(x => {
-  if (x.bookmarkedBy != undefined && x.bookmarkedBy.contactPerson != undefined) {
+  coupinoData.coupinoBookmarks.forEach(x => {
+    if (x.bookmarkedBy != undefined && x.bookmarkedBy.contactPerson != undefined) {
       var item = {
-          _id: x.bookmarkedBy._id,
-          firstName: x.bookmarkedBy.contactPerson.firstName,
-          lastName: x.bookmarkedBy.contactPerson.lastName.charAt(0) + ".",
-          profilePicUrl: '/user/profilePic/' + x.bookmarkedBy._id,
-          isDefaultImage: x.bookmarkedBy.contactPerson.isDefaultImage,
-          defaultImagePath: x.bookmarkedBy.contactPerson.defaultImagePath
+        _id: x.bookmarkedBy._id,
+        firstName: x.bookmarkedBy.contactPerson.firstName,
+        lastName: x.bookmarkedBy.contactPerson.lastName.charAt(0) + ".",
+        profilePicUrl: '/user/profilePic/' + x.bookmarkedBy._id,
+        isDefaultImage: x.bookmarkedBy.contactPerson.isDefaultImage,
+        defaultImagePath: x.bookmarkedBy.contactPerson.defaultImagePath
       }
       coupinoBookmarks.push(item);
+    }
+  });
+  let bookmarkedByMe = coupinoData.coupinoBookmarks.find(x => x.bookmarkedBy._id == userId);
+  if (bookmarkedByMe != undefined && bookmarkedByMe != null) {
+    isBookmarkedByMe = true;
   }
-});
-let bookmarkedByMe = coupinoData.coupinoBookmarks.find(x => x.bookmarkedBy._id == userId);
-if (bookmarkedByMe != undefined && bookmarkedByMe != null) {
-isBookmarkedByMe = true;
-}
-if(coupinoData.imageUrl != null && coupinoData.imageUrl != '') {
-coupinoImage = '/coupinos/getMedia/' + coupinoData._id
-}
+  if (coupinoData.imageUrl != null && coupinoData.imageUrl != '') {
+    coupinoImage = '/coupinos/getMedia/' + coupinoData._id
+  }
 
-if (coupinoData.isSharedPost && coupinoData.shareDetails != undefined && coupinoData.shareDetails.sharedBy.contactPerson != undefined) {
-  shareDetails = {
+  if (coupinoData.isSharedPost && coupinoData.shareDetails != undefined && coupinoData.shareDetails.sharedBy.contactPerson != undefined) {
+    shareDetails = {
       originalPostId: coupinoData.shareDetails.originalCoupinoId,
       sharedOn: coupinoData.shareDetails.sharedOn,
       sharedBy: {
-          firstName: coupinoData.shareDetails.sharedBy.contactPerson.firstName,
-          lastName: coupinoData.shareDetails.sharedBy.contactPerson.lastName.charAt(0) + ".",
-          profilePicUrl: '/user/profilePic/' + coupinoData.shareDetails.sharedBy._id,
-          isDefaultImage: coupinoData.shareDetails.sharedBy.contactPerson.isDefaultImage,
-          defaultImagePath: coupinoData.shareDetails.sharedBy.contactPerson.defaultImagePath
+        firstName: coupinoData.shareDetails.sharedBy.contactPerson.firstName,
+        lastName: coupinoData.shareDetails.sharedBy.contactPerson.lastName.charAt(0) + ".",
+        profilePicUrl: '/user/profilePic/' + coupinoData.shareDetails.sharedBy._id,
+        isDefaultImage: coupinoData.shareDetails.sharedBy.contactPerson.isDefaultImage,
+        defaultImagePath: coupinoData.shareDetails.sharedBy.contactPerson.defaultImagePath
       }
+    }
   }
-}
-let coupinoImages = []
-if(coupinoData.images.length > 0){
-coupinoData.images.forEach(v=>{
-  coupinoImages.push({imageId:v._id,mediaType:v.mediaType,url:v.isDefaultImage == false ? '/coupinos/getMediaByImageId/' + coupinoData._id + '/' + v._id  : v.mediaUrl })
-})
-}
-const date2 = new Date(coupinoData.endDate);
-const diffTime = (date2 > new Date()) ? Math.abs(date2 - new Date()) : 0;
-const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+  let coupinoImages = []
+  if (coupinoData.images.length > 0) {
+    coupinoData.images.forEach(v => {
+      coupinoImages.push({ imageId: v._id, mediaType: v.mediaType, url: v.isDefaultImage == false ? '/coupinos/getMediaByImageId/' + coupinoData._id + '/' + v._id : v.mediaUrl })
+    })
+  }
+  const date2 = new Date(coupinoData.endDate);
+  const diffTime = (date2 > new Date()) ? Math.abs(date2 - new Date()) : 0;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-// console.log(coupinoData.coupinoViews)
-var _coupino = {
-_id:coupinoData._id,
-createdAt:coupinoData.createdOn,
-remainDays : diffDays,
-category: coupinoData.category,
-headline: coupinoData.heading,
-description: coupinoData.description,
-location: coupinoData.location,
-hashtags: coupinoData.hashtags,
-isLikedByMe: isLikedByMe,
-createdBy: coupinoData.creator,
-isBookmarkedByMe: isBookmarkedByMe,
-maxRedemptions: coupinoData.maxRedemptions,
-redemptionCount:  coupinoData.redemptionCount,
-value: coupinoData.value,
-startDate:coupinoData.startDate,
-endDate: coupinoData.endDate,
-status: coupinoData.status,
-title: coupinoData.infoText,
-type: coupinoData.type,
-isExpired: coupinoData.endDate < new Date(),
-coupinoBookmarks:coupinoBookmarks,
-coupinoLikes:coupinoLikes,
-shareDetails:shareDetails,
-images : coupinoImages,
-coupinoComments : coupinoComments,
-coupinoStatus : coupinoData.coupinoPaymentStatus,
-isActive : coupinoData.isActive,
-coupinoViews:coupinoData.coupinoViews,
-coupinoViewCount: (coupinoData.coupinoViews && coupinoData.coupinoViews.length != 0) ? (coupinoData.coupinoViews[0].viewBy ? coupinoData.coupinoViews[0].viewBy.length : 0 ) : 0,
-reportId:coupinoData.reportId,
-panalties:coupinoData.panalties,
-isRedeemedByMe:isRedeemedByMe,
-types: "Coupino"
-}
-return _coupino;
+  // console.log(coupinoData.coupinoViews)
+  var _coupino = {
+    _id: coupinoData._id,
+    createdAt: coupinoData.createdOn,
+    remainDays: diffDays,
+    category: coupinoData.category,
+    headline: coupinoData.heading,
+    description: coupinoData.description,
+    location: coupinoData.location,
+    hashtags: coupinoData.hashtags,
+    isLikedByMe: isLikedByMe,
+    createdBy: coupinoData.creator,
+    isBookmarkedByMe: isBookmarkedByMe,
+    maxRedemptions: coupinoData.maxRedemptions,
+    redemptionCount: coupinoData.redemptionCount,
+    value: coupinoData.value,
+    startDate: coupinoData.startDate,
+    endDate: coupinoData.endDate,
+    status: coupinoData.status,
+    title: coupinoData.infoText,
+    type: coupinoData.type,
+    isExpired: coupinoData.endDate < new Date(),
+    coupinoBookmarks: coupinoBookmarks,
+    coupinoLikes: coupinoLikes,
+    shareDetails: shareDetails,
+    images: coupinoImages,
+    coupinoComments: coupinoComments,
+    coupinoStatus: coupinoData.coupinoPaymentStatus,
+    isActive: coupinoData.isActive,
+    coupinoViews: coupinoData.coupinoViews,
+    coupinoViewCount: (coupinoData.coupinoViews && coupinoData.coupinoViews.length != 0) ? (coupinoData.coupinoViews[0].viewBy ? coupinoData.coupinoViews[0].viewBy.length : 0) : 0,
+    reportId: coupinoData.reportId,
+    panalties: coupinoData.panalties,
+    isRedeemedByMe: isRedeemedByMe,
+    types: "Coupino"
+  }
+  return _coupino;
 }
 
 
@@ -1917,203 +1923,110 @@ postRouter.post('/post/getSummary', auth, async (req, res) => {
     pageSize: req.body.pageSize || 10,
     page: req.body.page || 0,
     fromDate: new Date(req.body.fromDate) || "",
-    toDate:  new Date(req.body.toDate) || "",
+    toDate: new Date(req.body.toDate) || "",
     Categories: req.body.Categories || ''
   };
 
-
-  let newUsersCount;
-  let contentCount;
-  let postLikeCount;
-  let coupinoLikeCount;
-  let postCommentCount;
-  let coupinoCommentCount;
-  let CoupinoViewCount;
-  let postBookmarksCount;
-  let coupinoBookmarksCount;
-  let coupinoRedeemptionsCount;
-  let reportCount;
-  let postLike = [];
-  let coupinoLike =[];
-  let postComment=[];
-  let coupinoComment = [];
-  let postsBookmarks = [];
-  let CoupinosBookmarks = [];
-
-    
-    try {
-
-
-      //for User
-      const newUsers = await UserAccount.find({
+  try {
+    const [
+      newUsers,
+      newContent,
+      newPostLikes,
+      newCoupinoLikes,
+      newPostComments,
+      newCoupinoComments,
+      newCoupinoViews,
+      newPostBookmarks,
+      newCoupinoBookmarks,
+      newCoupinoRedeemptions,
+      newReports,
+      newPartnerLikes
+    ] = await Promise.all([
+      UserAccount.find({
         status: "Active",
-        creationDate : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-      });     
-       newUsersCount = newUsers.length;
-      
-
-       //for Content
-       const newContent = await Content.find({
+        creationDate: { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }),
+      Content.find({
         status: "Active",
-        createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-      });     
-      contentCount = newContent.length;
-
-      const newPostLikes = await Post.find({
-        status : "Active",
-        'postLikes': {
-          $elemMatch: {
-            'createdAt': {$gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate)}
-          }
-        }
-      })
-      .select('_id postImage postLikes postDescription postImages') // Assuming 'postId' and 'postImage' are the correct field names for your schema.
-      .populate({
-        path: 'postLikes.likedBy',
-        select: ('_id contactPerson ') // Or any other fields you want from the UserAccount schema.
-      });
-      postLikeCount = newPostLikes.length;     
-      postLike = newPostLikes;
-
-
-      //For coupino Like
-      const newCoupinoLikes= await Coupino.find({
-
-        'coupinoLikes': {
-          $elemMatch: {
-            'createdAt': {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-          }
-        }
-      }) .select('_id images coupinoLikes heading') // Assuming 'postId' and 'postImage' are the correct field names for your schema.
-      .populate({
-        path: 'coupinoLikes.likedBy',
-        select: ('_id contactPerson') // Or any other fields you want from the UserAccount schema.
-      });
-      coupinoLikeCount = newCoupinoLikes.length;
-      coupinoLike = newCoupinoLikes
-
-
-      //For Post Comment
-      const newPostComment = await PostComment.find({
+        createdAt: { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }),
+      Post.find({
         status: "Active",
-        createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-      })
-      .populate('commentedBy','id contactPerson')
-      .populate('postId','id postImages postDescription');   
-      postCommentCount = newPostComment.length;
-      postComment = newPostComment;
-
-
-      //Coupino Comment
-      const newCoupinoComment = await CoupinoComment.find({
+        'postLikes.createdAt': { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }).select('_id postImage postLikes postDescription postImages').populate('postLikes.likedBy', '_id contactPerson'),
+      Coupino.find({
+        'coupinoLikes.createdAt': { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }).select('_id images coupinoLikes heading').populate('coupinoLikes.likedBy', '_id contactPerson'),
+      PostComment.find({
         status: "Active",
-        createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-      })
-      .populate('commentedBy','id contactPerson')
-      .populate('postId','id postImages')
-
-      coupinoCommentCount = newCoupinoComment.length;     
-      coupinoComment = newCoupinoComment
-
-      //Coupino View
-      const newCoupinoView = await CoupinoView.find({
+        createdAt: { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }).populate('commentedBy', '_id contactPerson').populate('postId', '_id postImages postDescription'),
+      CoupinoComment.find({
         status: "Active",
-        createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-      });   
-      CoupinoViewCount = newCoupinoView.length;
+        createdAt: { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }).populate('commentedBy', '_id contactPerson').populate('coupinoId', '_id images heading'),
+      CoupinoView.find({
+        status: "Active",
+        createdAt: { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }),
+      Post.find({
+        'postBookmarks.createdAt': { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }).select('_id postImages postBookmarks postDescription').populate('postBookmarks.bookmarkedBy', '_id contactPerson'),
+      Coupino.find({
+        'coupinoBookmarks.createdAt': { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }).select('_id coupinoBookmarks heading').populate('coupinoBookmarks.bookmarkedBy', '_id contactPerson'),
+      CoupinoRedeemption.find({
+        'reedemedBy.createdAt': { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }),
+      Report.find({
+        status: "Active",
+        createdAt: { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }),
+      PartnerAccount.find({
+        status: "Active",
+        'partnerLikes.createdAt': { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      }).select('_id companyLogo partnerLikes companyName').populate('partnerLikes.likedBy', '_id contactPerson')
+     
 
+      //Partner Comment
+      // CoupinoComment.find({
+      //   status: "Active",
+      //   createdAt: { $gte: new Date(Obj.fromDate), $lt: new Date(Obj.toDate) }
+      // }).populate('commentedBy', '_id contactPerson').populate('coupinoId', '_id images heading')
+    ]);
 
-
-
-        //For Bookmarks Post
-        const newPostBookmarks= await Post.find({
-          'postBookmarks': {
-            $elemMatch: {
-              'createdAt': {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-            }
-          }
-        })
-        .select('_id postImages postBookmarks postDescription')
-        .populate({
-          path: 'postBookmarks.bookmarkedBy',
-          select: ('_id contactPerson')
-        });          
-        postBookmarksCount = newPostBookmarks.length;
-        postsBookmarks = newPostBookmarks;
-
-
-         //For Bookmarks coupino
-         const newCoupinoBookmarks= await Coupino.find({
-          'coupinoBookmarks': {
-            $elemMatch: {
-              'createdAt': {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-            }
-          }
-        })  
-        .select('_id coupinoBookmarks heading')
-        .populate({
-          path: 'coupinoBookmarks.bookmarkedBy',
-          select: ('_id contactPerson') // Or any other fields you want from the UserAccount schema.
-        }); 
-
-
-        coupinoBookmarksCount = newCoupinoBookmarks.length;
-        CoupinosBookmarks = newCoupinoBookmarks
-
-
-
-        //For coupinoredeemptions
-        const newCoupinoRedeemptions= await CoupinoRedeemption.find({
-          'reedemedBy': {
-            $elemMatch: {
-              'createdAt': {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-            }
-          }
-        })  
-        coupinoRedeemptionsCount = newCoupinoRedeemptions.length;
-
-
-
-        //For Report
-        const newReport = await Report.find({
-          status: "Active",
-          createdAt : {$gte: (new Date(Obj.fromDate)), $lt: (new Date(Obj.toDate))}
-        });   
-        reportCount = newReport.length;
-
-
-    } catch (error) {
-      console.error('Error fetching active users:', error);
-      throw error; 
-    }         
-
-
-    // Summary
-    var summary = {
-      newUsersCount,
-       contentCount,
-       postLikeCount,
-       coupinoLikeCount,
-       postCommentCount,
-       coupinoCommentCount,
-       CoupinoViewCount,
-       postBookmarksCount,
-       coupinoBookmarksCount,
-       coupinoRedeemptionsCount,
-       reportCount,
-       postLike,
-       coupinoLike,
-       postComment,
-       coupinoComment,
-       CoupinosBookmarks,
-       postsBookmarks
-
-
+    const summary = {
+      newUsersCount: newUsers.length,
+      contentCount: newContent.length,
+      postLikeCount: newPostLikes.length,
+      coupinoLikeCount: newCoupinoLikes.length,
+      partnerLikeCount : newPartnerLikes.length,
+      postCommentCount: newPostComments.length,
+      coupinoCommentCount: newCoupinoComments.length,
+      CoupinoViewCount: newCoupinoViews.length,
+      postBookmarksCount: newPostBookmarks.length,
+      coupinoBookmarksCount: newCoupinoBookmarks.length,
+      coupinoRedeemptionsCount: newCoupinoRedeemptions.length,
+      reportCount: newReports.length,
+      postLike: newPostLikes,
+      coupinoLike: newCoupinoLikes,
+      postComment: newPostComments,
+      coupinoComment: newCoupinoComments,
+      CoupinoViews: newCoupinoViews,
+      postsBookmarks: newPostBookmarks,
+      CoupinosBookmarks: newCoupinoBookmarks,
+      CoupinoRedeemptions: newCoupinoRedeemptions,
+      Reports: newReports,      
+      partnerLike : newPartnerLikes
     };
 
-    return res.status(200).json({status: "true",message : "get summary successfully" , summary});
-  
+    return res.status(200).json({ status: "true", message: "get summary successfully", summary });
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    return res.status(500).json({ status: "false", message: "Error fetching summary" });
+  }
 });
+
 
 
 
