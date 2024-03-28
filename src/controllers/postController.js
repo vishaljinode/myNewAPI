@@ -72,7 +72,7 @@ const getPosts=async(req,res)=>{
   console.log("User ID in getPost",userId);
 
   try {
-    let getPosts=await Post.find({postedBy:userId});
+    let getPosts=await Post.find({postedBy:userId,status:"Active"});
 
     let count=getPosts.length;
 
@@ -85,7 +85,7 @@ const getPosts=async(req,res)=>{
 const getPostById=async(req,res)=>{
  const postId=req.params.id;
  try {
-  let postById=await Post.findOne({_id:postId});
+  let postById=await Post.findOne({_id:postId,status:"Active"});
   res.status(200).json(postById);
  } catch (error) {
   console.log(error);
@@ -121,7 +121,7 @@ const postId=req.params.id;
 try {
 
   const deletedPost = await Post.findOneAndUpdate(
-    { _id: postId },
+    { _id: postId,status:"Active"},
     { $set: { status: "Deleted" } },
     { new: true }
 );
@@ -154,7 +154,7 @@ const likePost = async (req, res) => {
 
   try {
     const currentPost = await Post.findOneAndUpdate(
-      { _id: postId }, // Filter document by postId
+      { _id: postId,status :"Active" }, // Filter document by postId
       { $push: { postLikes: likeObj } }, // Push likeObj into postLikes array
       { new: true } // Option to return the updated document
     );
@@ -181,7 +181,7 @@ const savePost = async (req, res) => {
 
   try {
     const currentPost = await Post.findOneAndUpdate(
-      { _id: postId }, // Filter document by postId
+      { _id: postId,status:"Active"}, // Filter document by postId
       { $push: { postBookmarks: bookmarkObj } }, // Push likeObj into postLikes array
       { new: true } // Option to return the updated document
     );
@@ -261,10 +261,66 @@ const replyComment = async (req, res) => {
   }
 };
 
+const deleteComment=async(req, res) => {
+  const {commentId} = req.body;
+  const userId = req.userId;
+
+  // Validation
+  if (!commentId) {
+    return res.status(400).json({ success: false, message: 'Comment ID is required.' });
+  }
+
+  try {
+    let deleteComment = await PostComment.findOneAndUpdate(
+      { _id: commentId }, 
+      { $set : { status :"Deleted", deletedBy : userId ,deletedOn : new Date()}}, // Push likeObj into postLikes array
+      { new: true } 
+    );
+
+    res.status(201).json({ success: true, message: 'Comment deleted successfully.', data: deleteComment });
+  
+  } catch (error) {
+    console.error('Error deleting comment:', error); // Logging the error
+    res.status(500).json({ success: false, message: 'An error occurred while deleting comment.', error: error.toString() });
+  }
+}
+
+const deleteCommentReply=async(req, res) => {
+  const {replyCommentId} = req.body;
+  const userId = req.userId;
+
+  // Validation
+  if (!replyCommentId) {
+    return res.status(400).json({ success: false, message: 'Reply comment ID is required.' });
+  }
+
+  try {
+    let deletedCommentReply = await PostComment.findOneAndUpdate(
+      { "replyComment._id": replyCommentId }, 
+      { $set : { "replyComment.$.status" :"Deleted", "replyComment.$.deletedBy" : userId }}, // Push likeObj into postLikes array
+      { new: true } 
+    );
+
+    res.status(201).json({ success: true, message: 'CommentReply deleted successfully.', data: deletedCommentReply });
+  
+  } catch (error) {
+    console.error('Error deleting comment reply:', error); // Logging the error
+    res.status(500).json({ success: false, message: 'An error occurred while deleting comment reply.', error: error.toString() });
+  }
+}
 
 
 
-
-
-module.exports={replyComment,commentPost,savePost,likePost,createPost,getPosts,getPostById,updatePost,deletePost}
+module.exports={
+  deleteCommentReply,
+  replyComment,
+  deleteComment,
+  commentPost,
+  savePost,
+  likePost,
+  createPost,
+  getPosts,
+  getPostById,
+  updatePost,
+  deletePost}
 

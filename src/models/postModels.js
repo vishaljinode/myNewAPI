@@ -11,13 +11,13 @@ const postSchema = mongoose.Schema({
   status: {type:String, default:"Active"},
   shareDetails: {
       originalPostId: { type: mongoose.Schema.Types.ObjectId, ref: "Post", index: true },
-      sharedOn: { type: Date },
+      sharedOn: { type: Date , default: Date.now },
       sharedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true}
   },
   createdAt: { type: Date, default: Date.now }, 
-  deletedOn: { type: Date },
+  deletedOn: { type: Date , default: Date.now },
   deletedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true},
-  updatedOn: { type: Date },
+  updatedOn: { type: Date, default: Date.now  },
   updatedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true},
 },{timestamps : true});
 
@@ -45,14 +45,14 @@ var postCommentSchema = mongoose.Schema({
       status: {type:String, default:"Active", index: true},
       commentedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
       createdAt: { type: Date, default: Date.now },
-      deletedOn: { type: Date },
+      deletedOn: { type: Date , default: Date.now  },
       deletedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true},
-      updatedOn: { type: Date },
+      updatedOn: { type: Date , default: Date.now  },
       updatedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User"}
   }],
-  updatedOn: { type: Date },
+  updatedOn: { type: Date, default: Date.now  },
   updatedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User"},
-  deletedOn: { type: Date },
+  deletedOn: { type: Date, default: Date.now  },
   deletedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true},
 
 })
