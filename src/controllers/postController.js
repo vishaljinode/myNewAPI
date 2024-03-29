@@ -171,6 +171,30 @@ const likePost = async (req, res) => {
   }
 };
 
+const unLikePost = async (req, res) => {
+  const { postId } = req.body; // Getting the postId from the request body
+  const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
+
+
+  try {
+    const currentPost = await Post.findOneAndUpdate(
+      { _id: postId,status :"Active" ,"postLikes.likedBy":userId}, // Filter document by postId
+      { $pull: { postLikes: {likedBy:userId} } }, // Push likeObj into postLikes array
+      { new: true } // Option to return the updated document
+    );
+
+    if (!currentPost) {
+      return res.status(404).send('Post not found.');
+    }
+
+    // Send back the updated post document or a success message
+    res.json({ success: true, message: 'Post unliked successfully.', post: currentPost });
+  } catch (error) {
+    // Handle potential errors
+    res.status(500).json({ success: false, message: 'An error occurred while unliking the post.', error: error.toString() });
+  }
+};
+
 const savePost = async (req, res) => {
   const { postId } = req.body; // Getting the postId from the request body
   const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
@@ -197,6 +221,40 @@ const savePost = async (req, res) => {
     res.status(500).json({ success: false, message: 'An error occurred while saving the post.', error: error.toString() });
   }
 };
+
+const unSavePost = async (req, res) => {
+  const { postId } = req.body; // Getting the postId from the request body
+  const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
+
+
+  try {
+    const currentPost = await Post.findOneAndUpdate(
+      {
+        _id: postId, // Filter by postId
+        status: "Active",
+        "postBookmarks.bookmarkedBy": userId, // Further filter where user has bookmarked
+      },
+      { 
+        $pull: { postBookmarks: { bookmarkedBy: userId } } // Remove the object from postBookmarks array where bookmarkedBy matches userId
+      },
+      { 
+        new: true // Option to return the updated document
+      }
+    );
+    
+
+    if (!currentPost) {
+      return res.status(404).send('Post not found.');
+    }
+
+    // Send back the updated post document or a success message
+    res.json({ success: true, message: 'Post unsaved successfully.', post: currentPost });
+  } catch (error) {
+    // Handle potential errors
+    res.status(500).json({ success: false, message: 'An error occurred while un saving the post.', error: error.toString() });
+  }
+};
+
 
 const commentPost = async(req, res) => {
   const { postId, comment } = req.body;
@@ -311,7 +369,15 @@ const deleteCommentReply=async(req, res) => {
 
 
 
+
+
+
+
+
+
 module.exports={
+  unLikePost,
+  unSavePost,
   deleteCommentReply,
   replyComment,
   deleteComment,

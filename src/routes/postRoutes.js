@@ -1,6 +1,6 @@
 const express=require('express');
 const noteRouter=express.Router();
-const {deleteCommentReply,deleteComment,replyComment,commentPost,savePost,likePost,createPost,getPosts,getPostById,updatePost,deletePost,createPost1}=require('../controllers/postController');
+const {unLikePost,unSavePost,deleteCommentReply,deleteComment,replyComment,commentPost,savePost,likePost,createPost,getPosts,getPostById,updatePost,deletePost,createPost1}=require('../controllers/postController');
 const auth=require('../middleware/auth')
 const postmodels=require('../models/postModels');
 
@@ -17,7 +17,9 @@ noteRouter.put('/updatePost/:id',auth,updatePost);
 noteRouter.get('/deletePost/:id',auth,deletePost);
 
 noteRouter.post('/likePost',auth,likePost);
+noteRouter.post('/unlikePost',auth,unLikePost);
 noteRouter.post('/savePost',auth,savePost);
+noteRouter.post('/unsavePost',auth,unSavePost);
 
 
 noteRouter.post('/commentPost',auth,commentPost);
