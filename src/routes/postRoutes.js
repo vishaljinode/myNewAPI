@@ -18,6 +18,8 @@ noteRouter.get('/deletePost/:id',auth,deletePost);
 
 noteRouter.post('/likePost',auth,likePost);
 noteRouter.post('/unlikePost',auth,unLikePost);
+
+
 noteRouter.post('/savePost',auth,savePost);
 noteRouter.post('/unsavePost',auth,unSavePost);
 
