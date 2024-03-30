@@ -1,6 +1,10 @@
+
+
+
+
 const express=require('express');
 const noteRouter=express.Router();
-const {unLikePost,unSavePost,deleteCommentReply,deleteComment,replyComment,commentPost,savePost,likePost,createPost,getPosts,getPostById,updatePost,deletePost,createPost1}=require('../controllers/postController');
+const {summaryOfCurrentUser,sharePost,usersummary,unLikePost,unSavePost,deleteCommentReply,deleteComment,replyComment,commentPost,savePost,likePost,createPost,getPosts,getPostById,updatePost,deletePost,createPost1}=require('../controllers/postController');
 const auth=require('../middleware/auth')
 const postmodels=require('../models/postModels');
 
@@ -23,12 +27,18 @@ noteRouter.post('/unlikePost',auth,unLikePost);
 noteRouter.post('/savePost',auth,savePost);
 noteRouter.post('/unsavePost',auth,unSavePost);
 
+noteRouter.post('/sharepost',auth,sharePost);
+
 
 noteRouter.post('/commentPost',auth,commentPost);
 noteRouter.post('/replyComment',auth,replyComment);
 
 noteRouter.post('/deleteComment',auth,deleteComment);
 noteRouter.post('/deleteCommentReply',auth,deleteCommentReply);
+
+
+noteRouter.post('/usersummary',auth,usersummary)
+noteRouter.post('/summaryOfCurrentUser',auth,summaryOfCurrentUser)
 
 
 

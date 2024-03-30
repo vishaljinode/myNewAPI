@@ -3,10 +3,13 @@ const postmodels=require('../models/postModels');
 const userModels=require("../models/userModels");
 const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
+const mongoose = require('mongoose');
 
 const Post=postmodels.Post;
 const PostImage=postmodels.PostImage;
 const PostComment=postmodels.PostComment;
+
+const UserAccount = userModels.users;
 
 
         
@@ -275,10 +278,18 @@ const commentPost = async(req, res) => {
     await newComment.save();
 
 
+
+    let commentObj = {
+      commentBy: userId,
+      postId : newComment._id  // Structure of the object to push into postLikes array
+    };
+  
+
+
     //update Post
     await Post.findOneAndUpdate(
       { _id: postId }, // Filter document by postId
-      { $push: { postComments:newComment._id} }, // Push likeObj into postLikes array
+      { $push: { postComments:commentObj} }, // Push likeObj into postLikes array
       { new: true } // Option to return the updated document
     );
 
@@ -369,13 +380,184 @@ const deleteCommentReply=async(req, res) => {
 
 
 
+const sharePost = async (req, res) => {
+  const { postId } = req.body; // Getting the postId from the request body
+  const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
 
+  let shareObj = {
+    sharedBy: userId, // Structure of the object to push into postLikes array
+  };
+
+  try {
+    const currentPost = await Post.findOneAndUpdate(
+      { _id: postId,status :"Active" }, // Filter document by postId
+      { $push: { shareDetails : shareObj } }, // Push likeObj into postLikes array
+      { new: true } // Option to return the updated document
+    );
+
+    if (!currentPost) {
+      return res.status(404).send('Post not found.');
+    }
+
+    // Send back the updated post document or a success message
+    res.json({ success: true, message: 'Post share successfully.', post: currentPost });
+  } catch (error) {
+    // Handle potential errors
+    res.status(500).json({ success: false, message: 'An error occurred while sharing the post.', error: error.toString() });
+  }
+};
+
+//User Summary
+const usersummary = async (req, res) => {
+  const adminId = req.userId;
+
+  try {
+    const reqByUser = await UserAccount.findOne({
+      _id: adminId,
+      role: "Admin",
+      status: "Active",
+    });
+
+    if (!reqByUser) {
+      return res
+        .status(400)
+        .json({ status: false, message: "Only Admin Can Access" });
+    } else {
+      const totalUser = await UserAccount.find();
+      const totalUserId = totalUser.map((x) => x._id);
+
+      const summaryPromises = totalUserId.map(async (id) => {
+        const [
+          myUsername,
+          totalPost,
+          totalPostComment,
+          totalPostLike,
+          totalPostSave,
+          totalPostCommentReply,
+          totalPostShare,
+        ] = await Promise.all([
+          UserAccount.findOne({ _id: id }).select("_id username email"),
+          Post.find({ postedBy: id }),
+          PostComment.find({ commentedBy: id }),
+          Post.find({ "postLikes.likedBy": id }),
+          Post.find({ "postBookmarks.bookmarkedBy": id }),
+          PostComment.find({ "replyComment.commentedBy": id }),
+          Post.find({ "shareDetails.sharedBy": id }),
+        ]);
+
+        const summaryObj = {
+          userId: id,
+          username: myUsername.username,
+          userEmail: myUsername.email,
+          userPostCount: totalPost.length,
+          userPostCommentCount: totalPostComment.length,
+          userPostLikeCount: totalPostLike.length,
+          userPostSaveCount: totalPostSave.length,
+          userPostCommentReplyCount: totalPostCommentReply.length,
+          userPostShareCount: totalPostShare.length,
+        };
+        return summaryObj;
+      });
+
+      const summary = await Promise.all(summaryPromises);
+      return res
+        .status(200)
+        .json({
+          status: true,
+          message: "User data retrieved successfully",
+          userData: summary,
+        });
+    }
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const summaryOfCurrentUser = async (req, res) => {
+  const adminId = req.userId;
+
+  try {
+    const reqByUser = await UserAccount.findOne({
+      _id: adminId,
+      role: "Admin",
+      status: "Active",
+    });
+
+    if (!reqByUser) {
+      return res
+        .status(400)
+        .json({ status: false, message: "Only Admin Can Access" });
+    } else {
+      
+      const totalUserId = [req.body.currentUserId]
+      const summaryPromises = totalUserId.map(async (id) => {
+        const [
+          myUsername,
+          totalPost,
+          totalPostComment,
+          totalPostLike,
+          totalPostSave,
+          totalPostCommentReply,
+          totalPostShare,
+        ] = await Promise.all([
+          UserAccount.findOne({ _id: id }).select("_id username email"),
+          Post.find({ postedBy: id }),
+          PostComment.find({ commentedBy: id }),
+          Post.find({ "postLikes.likedBy": id }).select("_id postTitle postLikes"),
+          Post.find({ "postBookmarks.bookmarkedBy": id }).select("_id postTitle postBookmarks"),
+          PostComment.find({ "replyComment.commentedBy": id })
+            .select("_id comment replyComment")
+            .populate({
+              path: 'postId',
+              select: '_id postTitle postDescription',
+              populate: {
+                path: 'postImages',
+                model: 'PostImage' // Assuming 'PostImage' is the model name for post images
+              }
+            }),
+          Post.find({ "shareDetails.sharedBy": id }).select("_id postTitle shareDetails"),
+        ]);
+      
+        const summaryObj = {
+          userId: id,
+          username: myUsername.username,
+          userEmail: myUsername.email,
+          userPostCount: totalPost.length,
+          userPostCommentCount: totalPostComment.length,
+          userPostLikeCount: totalPostLike.length,
+          userPostSaveCount: totalPostSave.length,
+          userPostCommentReplyCount: totalPostCommentReply.length,
+          userPostShareCount: totalPostShare.length,
+          userPost: totalPost,
+          userPostComment: totalPostComment,
+          userPostLike: totalPostLike,
+          userPostSave: totalPostSave,
+          userPostCommentReply: totalPostCommentReply,
+          userPostShare: totalPostShare,
+        };
+        return summaryObj;
+      });
+      
+      const summary = await Promise.all(summaryPromises);
+      return res.status(200).json({
+        status: true,
+        message: "User data retrieved successfully",
+        userData: summary,
+      });
+    }
+  } catch (error) {
+    console.log(error);
+  }
+};
 
 
 
 
 
 module.exports={
+  summaryOfCurrentUser,
+  sharePost,
+  usersummary,
   unLikePost,
   unSavePost,
   deleteCommentReply,

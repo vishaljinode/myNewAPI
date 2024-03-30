@@ -5,15 +5,18 @@ const postSchema = mongoose.Schema({
   postDist : { type: mongoose.Schema.Types.String },   
   postImages: { type: mongoose.Schema.Types.ObjectId, ref: "PostImage" },
   postedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
-  postLikes: [{ likedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User"}, createdAt: { type: Date, default: Date.now }}],
-  postComments: [{ type: mongoose.Schema.Types.ObjectId, ref: "PostComment", index: true }],
+  postLikes: [{ likedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User"}, 
+  createdAt: { type: Date, default: Date.now }}],
+  postComments: [
+    {commentBy:{ type: mongoose.Schema.Types.ObjectId, ref: "User"},
+   postId:{ type: mongoose.Schema.Types.ObjectId, ref: "PostComment" }}],
+ 
   postBookmarks:  [{ bookmarkedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true}, createdAt: { type: Date, default: Date.now } }],
   status: {type:String, default:"Active"},
-  shareDetails: {
-      originalPostId: { type: mongoose.Schema.Types.ObjectId, ref: "Post", index: true },
-      sharedOn: { type: Date , default: Date.now },
-      sharedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true}
-  },
+  shareDetails: 
+  [{ sharedBy :{type: mongoose.Schema.Types.ObjectId, ref: "User", index: true},     
+      sharedOn: { type: Date, default: Date.now } }],
+
   createdAt: { type: Date, default: Date.now }, 
   deletedOn: { type: Date , default: Date.now },
   deletedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true},
