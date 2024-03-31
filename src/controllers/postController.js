@@ -501,10 +501,16 @@ const summaryOfCurrentUser = async (req, res) => {
           totalPostShare,
         ] = await Promise.all([
           UserAccount.findOne({ _id: id }).select("_id username email"),
-          Post.find({ postedBy: id }),
-          PostComment.find({ commentedBy: id }),
-          Post.find({ "postLikes.likedBy": id }).select("_id postTitle postLikes"),
-          Post.find({ "postBookmarks.bookmarkedBy": id }).select("_id postTitle postBookmarks"),
+          Post.find({ postedBy: id }).populate('postImages','mediaUrl'),
+          PostComment.find({ commentedBy: id }).populate({
+            path: 'postId',
+            populate: {
+              path: 'postImages',
+              model: PostImage // Use the PostImage model for populating the postImages field
+            }
+          }),
+          Post.find({ "postLikes.likedBy": id }).select("_id postTitle postDescription postLikes").populate('postImages','mediaUrl'),
+          Post.find({ "postBookmarks.bookmarkedBy": id }).select("_id postTitle postBookmarks").populate('postImages','mediaUrl'),
           PostComment.find({ "replyComment.commentedBy": id })
             .select("_id comment replyComment")
             .populate({
@@ -512,10 +518,10 @@ const summaryOfCurrentUser = async (req, res) => {
               select: '_id postTitle postDescription',
               populate: {
                 path: 'postImages',
-                model: 'PostImage' // Assuming 'PostImage' is the model name for post images
+                model: PostImage // Assuming 'PostImage' is the model name for post images
               }
             }),
-          Post.find({ "shareDetails.sharedBy": id }).select("_id postTitle shareDetails"),
+          Post.find({ "shareDetails.sharedBy": id }).select("_id postTitle postDescription").populate('postImages','mediaUrl'),
         ]);
       
         const summaryObj = {
