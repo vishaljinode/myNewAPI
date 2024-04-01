@@ -7,9 +7,11 @@ const postSchema = mongoose.Schema({
   postedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
   postLikes: [{ likedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User"}, 
   createdAt: { type: Date, default: Date.now }}],
-  postComments: [
-    {commentBy:{ type: mongoose.Schema.Types.ObjectId, ref: "User"},
-   postId:{ type: mongoose.Schema.Types.ObjectId, ref: "PostComment" }}],
+  postComments: [   
+    { commentId:{ type: mongoose.Schema.Types.ObjectId, ref: "PostComment"},
+      commentBy:{ type: mongoose.Schema.Types.ObjectId, ref: "User"},       
+    }
+  ],
  
   postBookmarks:  [{ bookmarkedBy: {type: mongoose.Schema.Types.ObjectId, ref: "User", index: true}, createdAt: { type: Date, default: Date.now } }],
   status: {type:String, default:"Active"},

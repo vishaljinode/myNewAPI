@@ -19,7 +19,7 @@ cloudinary.config({
   api_secret: 'FIEq8HyYSMDbm2S3-YDLEotJ8AU' 
 });
 
-
+//for user
 const createPost=async(req,res)=>{
     
   const userId = req.userId; 
@@ -70,12 +70,20 @@ const createPost=async(req,res)=>{
       res.status(500).send('An unexpected error occurred');
   }
 }
+
+//get All post of user
 const getPosts=async(req,res)=>{
   const userId=req.userId;
   console.log("User ID in getPost",userId);
 
   try {
-    let getPosts=await Post.find({postedBy:userId,status:"Active"});
+    let getPosts=await Post.find({postedBy:userId,status:"Active"})
+    .populate('postImages','mediaUrl')
+    .populate('postLikes.likedBy','username')
+    .populate('postComments.commentBy','username')
+    .populate('postComments.commentId','username')
+    .populate('postBookmarks.bookmarkedBy','username')
+    .populate('shareDetails.sharedBy','username')
 
     let count=getPosts.length;
 
@@ -85,15 +93,28 @@ const getPosts=async(req,res)=>{
     console.log(error);
   }
 }
+
+
+//get post by post Id
 const getPostById=async(req,res)=>{
  const postId=req.params.id;
  try {
-  let postById=await Post.findOne({_id:postId,status:"Active"});
-  res.status(200).json(postById);
+  let postById=await Post.findOne({_id:postId,status:"Active"})
+  .populate('postImages','mediaUrl')
+  .populate('postLikes.likedBy','username')
+  .populate('postComments.commentBy','username')
+  .populate('postComments.commentId','username')
+  .populate('postBookmarks.bookmarkedBy','username')
+  .populate('shareDetails.sharedBy','username')
+
+
+ return res.status(200).json(postById);
  } catch (error) {
   console.log(error);
  }
 }
+
+//Update post by post Id
 const updatePost=async(req,res)=>{
   const postId=req.params.id;
   const {title,description}=req.body;
@@ -118,6 +139,9 @@ try{
 
 }
 }
+
+
+//delete post by post Id
 const deletePost=async(req,res)=>{
 const postId=req.params.id;
 
@@ -147,6 +171,7 @@ res.status(200).json({ message: "Post Deleted Successfully", deletedPost });
 
 }
 
+//like post by post Id
 const likePost = async (req, res) => {
   const { postId } = req.body; // Getting the postId from the request body
   const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
@@ -281,7 +306,7 @@ const commentPost = async(req, res) => {
 
     let commentObj = {
       commentBy: userId,
-      postId : newComment._id  // Structure of the object to push into postLikes array
+      commentId : newComment._id  // Structure of the object to push into postLikes array
     };
   
 
@@ -378,8 +403,6 @@ const deleteCommentReply=async(req, res) => {
   }
 }
 
-
-
 const sharePost = async (req, res) => {
   const { postId } = req.body; // Getting the postId from the request body
   const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
@@ -407,6 +430,10 @@ const sharePost = async (req, res) => {
   }
 };
 
+
+
+
+//###############For Admin#######
 //User Summary
 const usersummary = async (req, res) => {
   const adminId = req.userId;
@@ -473,6 +500,7 @@ const usersummary = async (req, res) => {
   }
 };
 
+//User Summary Of current User
 const summaryOfCurrentUser = async (req, res) => {
   const adminId = req.userId;
 
@@ -509,8 +537,8 @@ const summaryOfCurrentUser = async (req, res) => {
               model: PostImage // Use the PostImage model for populating the postImages field
             }
           }),
-          Post.find({ "postLikes.likedBy": id }).select("_id postTitle postDescription postLikes").populate('postImages','mediaUrl'),
-          Post.find({ "postBookmarks.bookmarkedBy": id }).select("_id postTitle postBookmarks").populate('postImages','mediaUrl'),
+          Post.find({ "postLikes.likedBy": id }).select("_id postTitle postDescription postLikes status").populate('postImages','mediaUrl'),
+          Post.find({ "postBookmarks.bookmarkedBy": id }).select("_id postTitle postBookmarks status").populate('postImages','mediaUrl'),
           PostComment.find({ "replyComment.commentedBy": id })
             .select("_id comment replyComment")
             .populate({
@@ -521,7 +549,7 @@ const summaryOfCurrentUser = async (req, res) => {
                 model: PostImage // Assuming 'PostImage' is the model name for post images
               }
             }),
-          Post.find({ "shareDetails.sharedBy": id }).select("_id postTitle postDescription").populate('postImages','mediaUrl'),
+          Post.find({ "shareDetails.sharedBy": id }).select("_id postTitle postDescription status").populate('postImages','mediaUrl'),
         ]);
       
         const summaryObj = {
@@ -557,10 +585,28 @@ const summaryOfCurrentUser = async (req, res) => {
 };
 
 
+//Get Post Of User
+const getPostByIdAdmin=async(req,res)=>{
+  const postId=req.params.id;
+  try {
+   let postById=await Post.findOne({_id:postId})
+   .populate('postImages','mediaUrl')
+   .populate('postLikes.likedBy','username')
+   .populate('postComments.commentBy','username')
+   .populate('postComments.commentId','username')
+   .populate('postBookmarks.bookmarkedBy','username')
+   .populate('shareDetails.sharedBy','username')
+   return res.status(200).json(postById);
+  } catch (error) {
+   console.log(error);
+  }
+ }
+
 
 
 
 module.exports={
+  getPostByIdAdmin,
   summaryOfCurrentUser,
   sharePost,
   usersummary,
