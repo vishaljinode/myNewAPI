@@ -593,7 +593,7 @@ const getPostByIdAdmin=async(req,res)=>{
    .populate('postImages','mediaUrl')
    .populate('postLikes.likedBy','username')
    .populate('postComments.commentBy','username')
-   .populate('postComments.commentId','comment')
+   .populate('postComments.commentId')
    .populate('postBookmarks.bookmarkedBy','username')
    .populate('shareDetails.sharedBy','username')
    return res.status(200).json(postById);
