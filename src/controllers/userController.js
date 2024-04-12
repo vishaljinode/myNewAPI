@@ -19,11 +19,8 @@ const signUp = async (req, res) => {
     // const hashedpassword = await bcrypt.hash(password, 10);
 
     //Create new User
-    const newUser = await User.create({
-      username: username,
-      password: password,
-      email: email
-    })
+    await User.create({ username, password, email });
+    const newUser = await User.findOne({ email , password ,username }).select('email username');
 
     //token genaration
     const token = await jwt.sign({ email: newUser.email, id: newUser._id }, SECTRET_KEY);
@@ -55,9 +52,11 @@ const signIn = async(req,res)=>{
       return res.status(400).json({message:"email or password not match"})
     }
 
+    const signInuser=await User.findOne({_id:existingUser._id});
     //token generation
     const token=await jwt.sign({email:existingUser.email,id:existingUser._id},SECTRET_KEY);
-    res.status(200).json({User:existingUser,Token:token})
+    
+    res.status(200).json({User:signInuser,Token:token})
 
   } catch (error) {
     console.log(error);
