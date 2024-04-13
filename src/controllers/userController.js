@@ -52,7 +52,7 @@ const signIn = async(req,res)=>{
       return res.status(400).json({message:"email or password not match"})
     }
 
-    const signInuser=await User.findOne({_id:existingUser._id});
+    const signInuser=await User.findOne({_id:existingUser._id}).select('email username');
     //token generation
     const token=await jwt.sign({email:existingUser.email,id:existingUser._id},SECTRET_KEY);
     
