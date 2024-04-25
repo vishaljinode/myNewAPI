@@ -30,7 +30,6 @@ noteRouter.post('/unlikePost',auth,unLikePost);
 
 noteRouter.post('/savePost',auth,savePost);
 noteRouter.post('/unsavePost',auth,unSavePost);
-
 noteRouter.post('/sharepost',auth,sharePost);
 
 

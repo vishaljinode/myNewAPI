@@ -102,6 +102,7 @@ const getAllPosts=async(req,res)=>{
 
   try {
     let getPosts=await Post.find({status:"Active"})
+    .populate('postedBy','username')
     .populate('postImages','mediaUrl')
     .populate('postLikes.likedBy','username')
     .populate('postComments.commentBy','username')
