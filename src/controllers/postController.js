@@ -95,6 +95,30 @@ const getPosts=async(req,res)=>{
 }
 
 
+//get All Posts for home Page
+const getAllPosts=async(req,res)=>{
+  const userId=req.userId;
+  console.log("User ID in getPost",userId);
+
+  try {
+    let getPosts=await Post.find({status:"Active"})
+    .populate('postImages','mediaUrl')
+    .populate('postLikes.likedBy','username')
+    .populate('postComments.commentBy','username')
+    .populate('postComments.commentId','username')
+    .populate('postBookmarks.bookmarkedBy','username')
+    .populate('shareDetails.sharedBy','username')
+    .sort({createdAt : -1})
+
+    let count=getPosts.length;
+
+    res.status(200).json({length:count,post:getPosts});
+
+  } catch (error) {
+    console.log(error);
+  }
+}
+
 //get post by post Id
 const getPostById=async(req,res)=>{
  const postId=req.params.id;
@@ -596,6 +620,7 @@ const getPostByIdAdmin=async(req,res)=>{
    .populate('postComments.commentId')
    .populate('postBookmarks.bookmarkedBy','username')
    .populate('shareDetails.sharedBy','username')
+   
    return res.status(200).json(postById);
   } catch (error) {
    console.log(error);
@@ -606,6 +631,7 @@ const getPostByIdAdmin=async(req,res)=>{
 
 
 module.exports={
+  getAllPosts,
   getPostByIdAdmin,
   summaryOfCurrentUser,
   sharePost,
