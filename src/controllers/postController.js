@@ -106,7 +106,7 @@ const getAllPosts=async(req,res)=>{
     .populate('postImages','mediaUrl')
     .populate('postLikes.likedBy','username')
     .populate('postComments.commentBy','username')
-    .populate('postComments.commentId','username')
+    .populate('postComments.commentId','comment replyComment')
     .populate('postBookmarks.bookmarkedBy','username')
     .populate('shareDetails.sharedBy','username')
     .sort({createdAt : -1})
