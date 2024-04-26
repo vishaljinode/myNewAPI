@@ -4,7 +4,7 @@
 
 const express=require('express');
 const noteRouter=express.Router();
-const {summaryOfCurrentUser,sharePost,usersummary,unLikePost,
+const {getComments,summaryOfCurrentUser,sharePost,usersummary,unLikePost,
         unSavePost,deleteCommentReply,deleteComment,replyComment,
         commentPost,savePost,likePost,createPost,getPosts,getPostById,getAllPosts,
         updatePost,deletePost,getPostByIdAdmin}=require('../controllers/postController');
@@ -32,7 +32,7 @@ noteRouter.post('/savePost',auth,savePost);
 noteRouter.post('/unsavePost',auth,unSavePost);
 noteRouter.post('/sharepost',auth,sharePost);
 
-
+noteRouter.get('/getComments/:id',auth,getComments);
 noteRouter.post('/commentPost',auth,commentPost);
 noteRouter.post('/replyComment',auth,replyComment);
 

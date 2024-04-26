@@ -120,6 +120,33 @@ const getAllPosts=async(req,res)=>{
   }
 }
 
+
+
+
+//get comments
+const getComments=async(req,res)=>{
+  const postId=req.params.id; 
+
+  try {
+    let getAllComments=await PostComment.find({status:"Active",postId : postId })   
+    .populate('commentedBy','username')
+    .sort({createdAt : -1})
+
+    let count=getAllComments.length;
+
+    res.status(200).json({length:count,comments:getAllComments});
+
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+
+
+
+
+
+
 //get post by post Id
 const getPostById=async(req,res)=>{
  const postId=req.params.id;
@@ -632,6 +659,7 @@ const getPostByIdAdmin=async(req,res)=>{
 
 
 module.exports={
+  getComments,
   getAllPosts,
   getPostByIdAdmin,
   summaryOfCurrentUser,
