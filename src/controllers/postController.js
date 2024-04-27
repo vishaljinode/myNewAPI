@@ -96,31 +96,33 @@ const getPosts=async(req,res)=>{
 
 
 //get All Posts for home Page
-// const getAllPosts=async(req,res)=>{
-//   const userId=req.userId;
-//   console.log("User ID in getPost",userId);
+const getAllPosts=async(req,res)=>{
+  const userId=req.userId;
+  console.log("User ID in getPost",userId);
 
-//   try {
-//     let getPosts=await Post.find({status:"Active"})
-//     .populate('postedBy','username')
-//     .populate('postImages','mediaUrl')
-//     .populate('postLikes.likedBy','username')
-//     .populate('postComments.commentBy','username')
-//     .populate('postComments.commentId','comment replyComment')
-//     .populate('postBookmarks.bookmarkedBy','username')
-//     .populate('shareDetails.sharedBy','username')
-//     .sort({createdAt : -1})
+  try {
+    let getPosts=await Post.find({status:"Active"})
+    .populate('postedBy','username')
+    .populate('postImages','mediaUrl')
+    .populate('postLikes.likedBy','username')
+    .populate('postComments.commentBy','username')
+    .populate('postComments.commentId','comment replyComment')
+    .populate('postBookmarks.bookmarkedBy','username')
+    .populate('shareDetails.sharedBy','username')
+    .sort({createdAt : -1})
 
-//     let count=getPosts.length;
+    let count=getPosts.length;
 
-//     res.status(200).json({length:count,post:getPosts});
+    res.status(200).json({length:count,post:getPosts});
 
-//   } catch (error) {
-//     console.log(error);
-//   }
-// }
+  } catch (error) {
+    console.log(error);
+  }
+}
 
-const getAllPosts = async (req, res) => {
+
+//get All Posts for home Page with page and limit
+const getAllPostswithlimit = async (req, res) => {
   const userId = req.userId;
   const page = parseInt(req.query.page) || 1; // Default to page 1 if not specified
   const limit = parseInt(req.query.limit) || 10; // Default limit to 10 if not specified
@@ -699,6 +701,7 @@ const getPostByIdAdmin=async(req,res)=>{
 
 
 module.exports={
+  getAllPostswithlimit,
   getComments,
   getAllPosts,
   getPostByIdAdmin,
