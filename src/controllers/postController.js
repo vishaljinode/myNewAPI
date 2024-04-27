@@ -96,29 +96,69 @@ const getPosts=async(req,res)=>{
 
 
 //get All Posts for home Page
-const getAllPosts=async(req,res)=>{
-  const userId=req.userId;
-  console.log("User ID in getPost",userId);
+// const getAllPosts=async(req,res)=>{
+//   const userId=req.userId;
+//   console.log("User ID in getPost",userId);
+
+//   try {
+//     let getPosts=await Post.find({status:"Active"})
+//     .populate('postedBy','username')
+//     .populate('postImages','mediaUrl')
+//     .populate('postLikes.likedBy','username')
+//     .populate('postComments.commentBy','username')
+//     .populate('postComments.commentId','comment replyComment')
+//     .populate('postBookmarks.bookmarkedBy','username')
+//     .populate('shareDetails.sharedBy','username')
+//     .sort({createdAt : -1})
+
+//     let count=getPosts.length;
+
+//     res.status(200).json({length:count,post:getPosts});
+
+//   } catch (error) {
+//     console.log(error);
+//   }
+// }
+
+const getAllPosts = async (req, res) => {
+  const userId = req.userId;
+  const page = parseInt(req.query.page) || 1; // Default to page 1 if not specified
+  const limit = parseInt(req.query.limit) || 10; // Default limit to 10 if not specified
+  const skip = (page - 1) * limit; // Calculate the number of documents to skip
+
+  console.log("User ID in getPost", userId);
 
   try {
-    let getPosts=await Post.find({status:"Active"})
-    .populate('postedBy','username')
-    .populate('postImages','mediaUrl')
-    .populate('postLikes.likedBy','username')
-    .populate('postComments.commentBy','username')
-    .populate('postComments.commentId','comment replyComment')
-    .populate('postBookmarks.bookmarkedBy','username')
-    .populate('shareDetails.sharedBy','username')
-    .sort({createdAt : -1})
+    // Fetch posts with pagination
+    let getPosts = await Post.find({ status: "Active" })
+      .populate('postedBy', 'username')
+      .populate('postImages', 'mediaUrl')
+      .populate('postLikes.likedBy', 'username')
+      .populate('postComments.commentBy', 'username')
+      .populate('postComments.commentId', 'comment replyComment')
+      .populate('postBookmarks.bookmarkedBy', 'username')
+      .populate('shareDetails.sharedBy', 'username')
+      .sort({ createdAt: -1 })
+      .skip(skip)  // Skip the previous pages results
+      .limit(limit);  // Limit the number of results
 
-    let count=getPosts.length;
+    // Fetch total count for pagination information
+    const total = await Post.countDocuments({ status: "Active" });
 
-    res.status(200).json({length:count,post:getPosts});
+    res.status(200).json({
+      length: getPosts.length,
+      posts: getPosts,
+      totalPosts: total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page
+    });
 
   } catch (error) {
-    console.log(error);
+    console.error(error);
+    res.status(500).json({ message: "Error fetching posts" });
   }
 }
+
 
 
 
