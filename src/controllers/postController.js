@@ -18,7 +18,6 @@ cloudinary.config({
   api_key: '191923522744623', 
   api_secret: 'FIEq8HyYSMDbm2S3-YDLEotJ8AU' 
 });
-
 //for user
 const createPost=async(req,res)=>{
     
@@ -70,7 +69,59 @@ const createPost=async(req,res)=>{
       res.status(500).send('An unexpected error occurred');
   }
 }
+//edit Post 
+const editPost = async (req, res) => {
+  const postId = req.params.postId;
+  console.log("postId",postId)
+  const userId = req.userId; 
+  const storage = multer.memoryStorage();
+  let uploadMedia = multer({ storage: storage }).single('file');
 
+  try {
+    uploadMedia(req, res, async function (err) {
+      if (err instanceof multer.MulterError || err) {
+        return res.status(500).send(`File upload error: ${err.message}`);
+      }
+
+      try {
+        const post = await Post.findById(postId);
+        if (!post) {
+          return res.status(404).send('Post not found');
+        }
+        if (post.postedBy.toString() !== userId) {
+          return res.status(403).send('User is not authorized to edit this post');
+        }
+
+        // Update post details
+        post.postTitle = req.body.postTitle || post.postTitle;
+        post.postDescription = req.body.postDescription || post.postDescription;
+        post.postDist = req.body.postDist || post.postDist;
+
+        if (req.file) {
+          const file = req.file;
+          const result = await cloudinary.uploader.upload(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`);
+          const newMediaUrl = result.secure_url;
+          const newMediaType = result.format;
+
+          const updatedImage = await PostImage.findOneAndUpdate(
+            { postId: postId },
+            { mediaUrl: newMediaUrl, mediaType: newMediaType, postId: post._id },
+            { new: true, upsert: true }
+          );
+
+          post.postImages = updatedImage._id;
+        }
+
+        await post.save();
+        res.status(200).json(post);
+      } catch (updateError) {
+        return res.status(500).json({ error: `Update failed: ${updateError.message}` });
+      }
+    });
+  } catch (err) {
+    res.status(500).send(`An unexpected error occurred: ${err.message}`);
+  }
+}
 //get All post of user
 const getPosts=async(req,res)=>{
   const userId=req.userId;
@@ -93,7 +144,6 @@ const getPosts=async(req,res)=>{
     console.log(error);
   }
 }
-
 
 //get All Posts for home Page
 const getAllPosts=async(req,res)=>{
@@ -119,7 +169,6 @@ const getAllPosts=async(req,res)=>{
     console.log(error);
   }
 }
-
 
 //get All Posts for home Page with page and limit
 const getAllPostswithlimit = async (req, res) => {
@@ -161,10 +210,6 @@ const getAllPostswithlimit = async (req, res) => {
   }
 }
 
-
-
-
-
 //get comments
 const getComments=async(req,res)=>{
   const postId=req.params.id; 
@@ -182,13 +227,6 @@ const getComments=async(req,res)=>{
     console.log(error);
   }
 }
-
-
-
-
-
-
-
 //get post by post Id
 const getPostById=async(req,res)=>{
  const postId=req.params.id;
@@ -207,7 +245,6 @@ const getPostById=async(req,res)=>{
   console.log(error);
  }
 }
-
 //Update post by post Id
 const updatePost=async(req,res)=>{
   const postId=req.params.id;
@@ -233,7 +270,6 @@ try{
 
 }
 }
-
 
 //delete post by post Id
 const deletePost=async(req,res)=>{
@@ -264,7 +300,6 @@ res.status(200).json({ message: "Post Deleted Successfully", deletedPost });
 
 
 }
-
 //like post by post Id
 const likePost = async (req, res) => {
   const { postId } = req.body; // Getting the postId from the request body
@@ -292,7 +327,6 @@ const likePost = async (req, res) => {
     res.status(500).json({ success: false, message: 'An error occurred while liking the post.', error: error.toString() });
   }
 };
-
 const unLikePost = async (req, res) => {
   const { postId } = req.body; // Getting the postId from the request body
   const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
@@ -316,7 +350,6 @@ const unLikePost = async (req, res) => {
     res.status(500).json({ success: false, message: 'An error occurred while unliking the post.', error: error.toString() });
   }
 };
-
 const savePost = async (req, res) => {
   const { postId } = req.body; // Getting the postId from the request body
   const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
@@ -343,7 +376,6 @@ const savePost = async (req, res) => {
     res.status(500).json({ success: false, message: 'An error occurred while saving the post.', error: error.toString() });
   }
 };
-
 const unSavePost = async (req, res) => {
   const { postId } = req.body; // Getting the postId from the request body
   const userId = req.userId; // Assuming userId is already extracted/set from somewhere before this function is called
@@ -376,7 +408,6 @@ const unSavePost = async (req, res) => {
     res.status(500).json({ success: false, message: 'An error occurred while un saving the post.', error: error.toString() });
   }
 };
-
 
 const commentPost = async(req, res) => {
   const { postId, comment } = req.body;
@@ -419,6 +450,40 @@ const commentPost = async(req, res) => {
     res.status(500).json({ success: false, message: 'An error occurred while commenting on the post.', error: error.toString() });
   }
 }
+
+//Edit comment
+const editComment = async(req, res) => {
+  const { commentId, newComment } = req.body;
+  const userId = req.userId;
+
+  // Validation
+  if (!commentId || !newComment) {
+    return res.status(400).json({ success: false, message: 'Comment ID and new comment text are required.' });
+  }
+
+  try {
+    // Fetch the comment to be edited
+    let comment = await PostComment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ success: false, message: 'Comment not found.' });
+    }
+
+    // Check if the logged-in user is the one who posted the comment
+    if (comment.commentedBy.toString() !== userId) {
+      return res.status(403).json({ success: false, message: 'User is not authorized to edit this comment.' });
+    }
+
+    // Update the comment
+    comment.comment = newComment;
+    await comment.save();
+
+    res.status(200).json({ success: true, message: 'Comment updated successfully.', data: comment });
+  } catch (error) {
+    console.error('Error editing the comment:', error);
+    res.status(500).json({ success: false, message: 'An error occurred while editing the comment.', error: error.toString() });
+  }
+}
+
 const replyComment = async (req, res) => {
   const { commentId, comment } = req.body;
   const userId = req.userId;
@@ -701,6 +766,8 @@ const getPostByIdAdmin=async(req,res)=>{
 
 
 module.exports={
+  editComment,
+  editPost,
   getAllPostswithlimit,
   getComments,
   getAllPosts,
