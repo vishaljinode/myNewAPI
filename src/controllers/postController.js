@@ -123,18 +123,42 @@ const editPost = async (req, res) => {
   }
 }
 //get All post of user
+// const getPosts=async(req,res)=>{
+//   const userId=req.userId;
+//   console.log("User ID in getPost",userId);
+
+//   try {
+//     let getPosts=await Post.find({postedBy:userId,status:"Active"})
+//     .populate('postImages','mediaUrl')
+//     .populate('postLikes.likedBy','username')
+//     .populate('postComments.commentBy','username')
+//     .populate('postComments.commentId','username')
+//     .populate('postBookmarks.bookmarkedBy','username')
+//     .populate('shareDetails.sharedBy','username')
+
+//     let count=getPosts.length;
+
+//     res.status(200).json({length:count,post:getPosts});
+
+//   } catch (error) {
+//     console.log(error);
+//   }
+// }
+
 const getPosts=async(req,res)=>{
   const userId=req.userId;
   console.log("User ID in getPost",userId);
 
   try {
-    let getPosts=await Post.find({postedBy:userId,status:"Active"})
+    let getPosts=await Post.find({ postedBy : userId,status : "Active"})
+    .populate('postedBy','username')
     .populate('postImages','mediaUrl')
     .populate('postLikes.likedBy','username')
     .populate('postComments.commentBy','username')
-    .populate('postComments.commentId','username')
+    .populate('postComments.commentId','comment replyComment')
     .populate('postBookmarks.bookmarkedBy','username')
     .populate('shareDetails.sharedBy','username')
+    .sort({createdAt : -1})
 
     let count=getPosts.length;
 
