@@ -3,7 +3,7 @@
 
 const express=require('express');
 const userRouter=express.Router();
-const {signUp,signIn} = require("../controllers/userController")
+const {signUp,signIn,verifyUserOtp} = require("../controllers/userController")
 
 userRouter.get('/',(req,res)=>{
 res.send('hello user get');
@@ -13,6 +13,7 @@ res.send('hello user get');
 //user Routes singUp singIn
 userRouter.post('/signup',signUp);
 userRouter.post('/signin',signIn);
+userRouter.post('/verifyUserOTP',verifyUserOtp)
 
 
 

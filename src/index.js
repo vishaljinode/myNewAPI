@@ -4,6 +4,9 @@ const userRouter=require('./routes/userRoutes');
 const noteRouter=require('./routes/postRoutes');
 const router=require('./routes/upload')
 
+
+
+
 const mongoose=require('mongoose');
 const dotenv=require('dotenv');
 const cors=require('cors');
@@ -36,6 +39,8 @@ if (!process.env.MONGO_URL) {
 
 mongoose.connect(process.env.MONGO_URL).then(()=>{
   console.log("Database Connected Successfully");
+
+
 })
 .catch((e)=>{
   console.log("Error in connection : ",e);
@@ -43,7 +48,7 @@ mongoose.connect(process.env.MONGO_URL).then(()=>{
 
 
 
-app.listen(PORT,()=>{
+app.listen(PORT,async ()=>{
   console.log("Port is Running on: ",PORT);
 
 })

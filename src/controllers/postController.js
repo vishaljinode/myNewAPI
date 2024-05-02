@@ -4,6 +4,9 @@ const userModels=require("../models/userModels");
 const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
 const mongoose = require('mongoose');
+// Import the utility
+
+
 
 const Post=postmodels.Post;
 const PostImage=postmodels.PostImage;
@@ -18,6 +21,52 @@ cloudinary.config({
   api_key: '191923522744623', 
   api_secret: 'FIEq8HyYSMDbm2S3-YDLEotJ8AU' 
 });
+
+function generateRandomPassword(length = 8) {
+  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let password = "";
+  for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length));
+  }
+  return password;
+}
+
+
+//Forget Password
+// const resetUserPassword = async(req,res) =>{
+//   let email = req.body.email
+
+//   const user = await User.findOne({ email });
+//   if (!user) {
+//       throw new Error("User not found");
+//   }
+
+//   // Generate a random password
+//   const newPassword = generateRandomPassword(5); // you can specify the length you want
+
+//   // Hash the new password before storing it
+//   //const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+//   // Save the new hashed password
+//   // user.password = hashedPassword;
+//   user.password = newPassword;
+//   await user.save();
+
+//   // Prepare and send the email with the new password
+//   const message = `Your new password is: ${newPassword}\nPlease change it upon your next login.`;
+//   await sendEmail({
+//       email: user.email,
+//       subject: 'Your New Password',
+//       message
+//   });
+
+//   return res.status(200).json({ message: "Password reset successfully and email sent." });
+// }
+
+
+
+
+
 //for user
 const createPost=async(req,res)=>{
     
