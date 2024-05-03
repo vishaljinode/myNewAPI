@@ -22,51 +22,6 @@ cloudinary.config({
   api_secret: 'FIEq8HyYSMDbm2S3-YDLEotJ8AU' 
 });
 
-function generateRandomPassword(length = 8) {
-  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let password = "";
-  for (let i = 0; i < length; i++) {
-      password += charset.charAt(Math.floor(Math.random() * charset.length));
-  }
-  return password;
-}
-
-
-//Forget Password
-// const resetUserPassword = async(req,res) =>{
-//   let email = req.body.email
-
-//   const user = await User.findOne({ email });
-//   if (!user) {
-//       throw new Error("User not found");
-//   }
-
-//   // Generate a random password
-//   const newPassword = generateRandomPassword(5); // you can specify the length you want
-
-//   // Hash the new password before storing it
-//   //const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-//   // Save the new hashed password
-//   // user.password = hashedPassword;
-//   user.password = newPassword;
-//   await user.save();
-
-//   // Prepare and send the email with the new password
-//   const message = `Your new password is: ${newPassword}\nPlease change it upon your next login.`;
-//   await sendEmail({
-//       email: user.email,
-//       subject: 'Your New Password',
-//       message
-//   });
-
-//   return res.status(200).json({ message: "Password reset successfully and email sent." });
-// }
-
-
-
-
-
 //for user
 const createPost=async(req,res)=>{
     
@@ -171,6 +126,7 @@ const editPost = async (req, res) => {
     res.status(500).send(`An unexpected error occurred: ${err.message}`);
   }
 }
+
 //get All post of user
 // const getPosts=async(req,res)=>{
 //   const userId=req.userId;
@@ -196,7 +152,6 @@ const editPost = async (req, res) => {
 
 const getPosts=async(req,res)=>{
   const userId=req.userId;
-  console.log("User ID in getPost",userId);
 
   try {
     let getPosts=await Post.find({ postedBy : userId,status : "Active"})
@@ -481,6 +436,35 @@ const unSavePost = async (req, res) => {
     res.status(500).json({ success: false, message: 'An error occurred while un saving the post.', error: error.toString() });
   }
 };
+
+
+const getSavePosts = async(req,res)=>{
+const userId = req.userId;
+
+try {
+  let getPosts=await Post.find({ "postBookmarks.bookmarkedBy" : userId,status : "Active"})
+  .populate('postedBy','username')
+  .populate('postImages','mediaUrl')
+  .populate('postLikes.likedBy','username')
+  .populate('postComments.commentBy','username')
+  .populate('postComments.commentId','comment replyComment')
+  .populate('postBookmarks.bookmarkedBy','username')
+  .populate('shareDetails.sharedBy','username')
+  .sort({createdAt : -1})
+
+  let count=getPosts.length;
+
+  res.status(200).json({length:count,post:getPosts});
+
+} catch (error) {
+  console.log(error);
+}
+
+
+}
+
+
+
 
 const commentPost = async(req, res) => {
   const { postId, comment } = req.body;
@@ -839,6 +823,7 @@ const getPostByIdAdmin=async(req,res)=>{
 
 
 module.exports={
+  getSavePosts,
   editComment,
   editPost,
   getAllPostswithlimit,

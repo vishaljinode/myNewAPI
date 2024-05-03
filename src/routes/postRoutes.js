@@ -7,7 +7,7 @@ const noteRouter=express.Router();
 const {getAllPostswithlimit,getComments,summaryOfCurrentUser,sharePost,usersummary,unLikePost,
         unSavePost,deleteCommentReply,deleteComment,replyComment,editPost,
         commentPost,savePost,likePost,createPost,getPosts,getPostById,getAllPosts,editComment,
-        updatePost,deletePost,getPostByIdAdmin}=require('../controllers/postController');
+        updatePost,deletePost,getSavePosts,getPostByIdAdmin}=require('../controllers/postController');
 const auth=require('../middleware/auth')
 const postmodels=require('../models/postModels');
 
@@ -31,6 +31,8 @@ noteRouter.post('/unlikePost',auth,unLikePost);
 noteRouter.put('/editPost/:postId',auth,editPost);
 noteRouter.post('/savePost',auth,savePost);
 noteRouter.post('/unsavePost',auth,unSavePost);
+noteRouter.post('/getSavePosts',auth,getSavePosts);
+
 noteRouter.post('/sharepost',auth,sharePost);
 
 noteRouter.get('/getComments/:id',auth,getComments);
