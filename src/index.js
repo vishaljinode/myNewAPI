@@ -46,8 +46,6 @@ mongoose.connect(process.env.MONGO_URL).then(()=>{
   console.log("Error in connection : ",e);
 })
 
-
-
 app.listen(PORT,async ()=>{
   console.log("Port is Running on: ",PORT);
 
