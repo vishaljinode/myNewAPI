@@ -41,7 +41,7 @@ const signUp = async (req, res) => {
       await User.create({ username, password, email });
     }
 
-    const newUser = await User.findOne({ email }).select('_id email username status role');
+    const newUser = await User.findOne({ email }).select('_id email status');
 
     let otp = '';
     for (let i = 0; i < 6; i++) {
@@ -61,7 +61,9 @@ const signUp = async (req, res) => {
     });
 
     await Promise.all([updateUserVerificationCodePromise, sendEmailPromise]);
-    res.status(201).json({ status: true, User: newUser, message: `OTP sent on ${newUser.email}` })
+    const signUptoken = await jwt.sign({ email: newUser.email, id: newUser._id }, SECTRET_KEY);
+
+    res.status(201).json({ status: true, User: newUser, Token :signUptoken, message: `OTP sent on ${newUser.email}` })
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Something went wrong" });
