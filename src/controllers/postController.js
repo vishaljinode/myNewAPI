@@ -278,9 +278,9 @@ const updatePost=async(req,res)=>{
   const postId=req.params.id;
   const {title,description}=req.body;
 
-  console.log("title :",title);
-  console.log("description :",description);
-  console.log("postId :",postId);
+  // console.log("title :",title);
+  // console.log("description :",description);
+  // console.log("postId :",postId);
 
 
 
@@ -304,7 +304,10 @@ const deletePost=async(req,res)=>{
 const postId=req.params.id;
 
 try {
-
+    const currentPost = await Post.findOne({_id: postId})
+    if(!currentPost.postedBy.equals(req.userId)){
+      return res.status(401).json({ message: "Only Post Owner Delete Post" });
+    }
   const deletedPost = await Post.findOneAndUpdate(
     { _id: postId,status:"Active"},
     { $set: { status: "Deleted" } },
